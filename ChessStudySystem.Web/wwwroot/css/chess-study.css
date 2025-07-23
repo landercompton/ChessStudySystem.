@@ -1,0 +1,165 @@
+/* Chess Study System Styles */
+
+.chess-container {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    margin: 20px 0;
+    flex-wrap: wrap;
+}
+
+.chessboard-wrapper {
+    width: 400px;
+    height: 400px;
+    border: 2px solid #333;
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+}
+
+.chess-controls {
+    flex: 1;
+    min-width: 300px;
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.control-section {
+    background: white;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+    .control-section h5 {
+        margin-bottom: 15px;
+        color: #333;
+        border-bottom: 2px solid #007acc;
+        padding-bottom: 8px;
+    }
+
+.move-list {
+    max-height: 300px;
+    overflow-y: auto;
+    background: #fafafa;
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+}
+
+.move-item {
+    padding: 5px 10px;
+    margin: 2px 0;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background-color 0.2s;
+}
+
+    .move-item:hover {
+        background: #e3f2fd;
+    }
+
+    .move-item.active {
+        background: #2196f3;
+        color: white;
+    }
+
+.btn-chess {
+    background: #007acc;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin: 3px;
+    transition: background-color 0.2s;
+}
+
+    .btn-chess:hover {
+        background: #005a9e;
+    }
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+    .btn-secondary:hover {
+        background: #545b62;
+    }
+
+.evaluation-bar {
+    width: 100%;
+    height: 20px;
+    background: linear-gradient(to right, #000 50%, #fff 50%);
+    border: 1px solid #333;
+    border-radius: 4px;
+    margin: 10px 0;
+    position: relative;
+}
+
+.evaluation-indicator {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 2px;
+    height: 100%;
+    background: #ff0000;
+    transition: left 0.3s ease;
+}
+
+.status-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.status-connected {
+    background: #4caf50;
+}
+
+.status-disconnected {
+    background: #f44336;
+}
+
+.status-analyzing {
+    background: #ff9800;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .chess-container {
+        flex-direction: column;
+    }
+
+    .chessboard-wrapper {
+        width: 100%;
+        max-width: 400px;
+        height: auto;
+        aspect-ratio: 1;
+    }
+
+    .chess-controls {
+        width: 100%;
+    }
+}

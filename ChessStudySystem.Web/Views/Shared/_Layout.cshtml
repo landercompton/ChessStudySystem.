@@ -1,0 +1,82 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - ChessStudySystem.Web</title>
+
+    <!-- Local Chessground CSS - Updated paths -->
+    <link rel="stylesheet" href="~/css/chessground/chessground.base.css">
+    <link rel="stylesheet" href="~/css/chessground/chessground.brown.css">
+    <link rel="stylesheet" href="~/css/chessground/chessground.cburnett.css">
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Font Awesome for icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+    <!-- Custom Chess Study Styles -->
+    <link rel="stylesheet" href="~/css/chess-study.css">
+</head>
+<body>
+    <header>
+        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
+            <div class="container-fluid">
+                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">
+                    <strong>Chess Study System</strong>
+                </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
+                        aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
+                    <ul class="navbar-nav flex-grow-1">
+                        <li class="nav-item">
+                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Index">Home</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-dark" asp-area="" asp-controller="Chess" asp-action="Study">Study</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-dark" asp-controller="Chess" asp-action="Analysis">Analysis</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <div class="container-fluid">
+        <main role="main" class="pb-3">
+            @RenderBody()
+        </main>
+    </div>
+
+    <footer class="border-top footer text-muted mt-5">
+        <div class="container">
+            &copy; 2025 - Chess Study System - Built with Chessground 9.2.3
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Local Chessground 9.2.3 ES Module -->
+    <script type="module">
+        // Import from local file - Updated path
+        import { Chessground } from '@Url.Content("~/js/chessground/chessground.js")';
+
+        // Make it globally available
+        window.Chessground = Chessground;
+        window.chessgroundLoaded = true;
+
+        console.log('✅ Local Chessground 9.2.3 loaded successfully!');
+
+        // Dispatch ready event
+        window.dispatchEvent(new CustomEvent('chessgroundReady'));
+    </script>
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
