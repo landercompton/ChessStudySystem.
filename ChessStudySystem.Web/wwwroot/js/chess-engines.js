@@ -1,744 +1,485 @@
-﻿// Fixed Chess Engine Manager with Proper ES Module Support
-console.log('🚀 Loading chess engine manager with ES module Lichess Stockfish...');
-
+﻿// Chess Engine Manager with Improved Lichess Stockfish Support
 class ChessEngineManager {
     constructor() {
         this.engines = new Map();
-        this.currentEngine = null;
-        this.currentEngineId = null;
-        this.analysisCallback = null;
-        this.isAnalyzing = false;
-
-        this.registerEngines();
+        this.activeEngine = null;
         console.log('✅ Engine manager initialized');
     }
 
-    registerEngines() {
-        // Lichess Stockfish Engine - ES Module version
-        this.engines.set('lichess-stockfish', {
-            id: 'lichess-stockfish',
-            name: 'Lichess Stockfish',
-            description: 'Official Lichess Stockfish WASM engine (ES Module)',
-            strength: 3650,
-            type: 'lichess-wasm',
-            size: '~400KB',
-            loadTime: 'Fast',
-            features: ['NNUE', 'Multi-threading', 'WASM', 'Official Lichess'],
-            creator: 'Lichess.org',
-            license: 'GPL v3',
-            color: '#759900'
-        });
-
-        // Simple JavaScript Engine (always works)
-        this.engines.set('jsengine', {
-            id: 'jsengine',
-            name: 'JS Chess Engine',
-            description: 'Lightweight JavaScript chess engine (always works)',
-            strength: 2200,
-            type: 'javascript',
-            size: '100KB',
-            loadTime: 'Instant',
-            features: ['Alpha-Beta', 'Always Available', 'No Dependencies'],
-            creator: 'Built-in',
-            license: 'MIT',
-            color: '#FF9800'
-        });
-    }
-
-    getAvailableEngines() {
-        return Array.from(this.engines.values());
-    }
-
-    getEngineInfo(engineId) {
-        return this.engines.get(engineId);
-    }
-
-    async loadEngine(engineId) {
-        console.log(`🔄 Loading engine: ${engineId}`);
-
-        const engineInfo = this.engines.get(engineId);
-        if (!engineInfo) {
-            throw new Error(`Engine ${engineId} not found`);
-        }
-
-        // Unload current engine if any
-        if (this.currentEngine) {
-            await this.unloadCurrentEngine();
-        }
+    async loadEngine(engineType) {
+        console.log('🔄 Loading engine:', engineType);
 
         try {
-            let engine;
+            switch (engineType) {
+                case 'lichess-stockfish':
+                    return await this.loadLichessStockfish();
+                case 'stockfish-nnue':
+                    return await this.loadStockfishNNUE();
+                default:
+                    throw new Error(`Unknown engine type: ${engineType}`);
+            }
+        } catch (error) {
+            console.error(`❌ Failed to load ${engineType}:`, error);
+            this.onEngineError(error);
+            throw error;
+        }
+    }
 
-            if (engineId === 'lichess-stockfish') {
-                engine = await this.loadLichessStockfish(engineInfo);
-            } else if (engineId === 'jsengine') {
-                engine = await this.loadJSEngine(engineInfo);
-            } else {
-                throw new Error(`Unknown engine type: ${engineId}`);
+    async loadLichessStockfish() {
+        console.log('🔄 Loading Lichess Stockfish ES Module...');
+
+        try {
+            // Try different module paths
+            const modulePaths = [
+                '/js/stockfish/sf171-79.js',
+                '/js/stockfish/sf16-7.js',
+                '/js/stockfish/stockfish.js',
+                // Also try without leading slash
+                'js/stockfish/sf171-79.js',
+                'js/stockfish/sf16-7.js',
+                'js/stockfish/stockfish.js'
+            ];
+
+            let module = null;
+            let loadedPath = null;
+
+            for (const path of modulePaths) {
+                try {
+                    console.log(`🔄 Trying to import module from: ${path}`);
+                    // Check if file exists first
+                    const response = await fetch(path, { method: 'HEAD' });
+                    if (!response.ok) {
+                        console.log(`📁 File not found: ${path}`);
+                        continue;
+                    }
+
+                    module = await import(path);
+                    loadedPath = path;
+                    console.log(`✅ Successfully imported from: ${path}`);
+                    break;
+                } catch (err) {
+                    console.log(`❌ Failed to import from ${path}:`, err.message);
+                }
             }
 
-            this.currentEngine = engine;
-            this.currentEngineId = engineId;
+            if (!module) {
+                console.error('❌ No Stockfish module files found. Please ensure Stockfish files are in /wwwroot/js/stockfish/');
+                throw new Error('Failed to load any Stockfish module. Check that sf171-79.js or similar files exist in /wwwroot/js/stockfish/');
+            }
 
-            console.log(`✅ Engine loaded: ${engineInfo.name}`);
-            return {
-                success: true,
-                engine: engineInfo,
-                message: `${engineInfo.name} loaded successfully`
+            console.log('✅ ES Module imported successfully');
+            console.log('🔍 Module exports:', Object.keys(module));
+            console.log('🔍 Module type:', typeof module);
+            console.log('🔍 Module.default type:', typeof module.default);
+
+            let stockfish = null;
+
+            // Try different ways to instantiate Stockfish
+            if (typeof module.default === 'function') {
+                try {
+                    // For Lichess Stockfish, the default export is a function that returns the engine
+                    stockfish = await module.default();
+                    console.log('✅ Created Stockfish using await module.default()');
+                } catch (e) {
+                    console.log('⚠️ Failed with await, trying without await');
+                    stockfish = module.default();
+                    console.log('✅ Created Stockfish using module.default()');
+                }
+            } else if (typeof module.Stockfish === 'function') {
+                try {
+                    stockfish = new module.Stockfish();
+                    console.log('✅ Created Stockfish using new module.Stockfish()');
+                } catch (e) {
+                    stockfish = module.Stockfish();
+                    console.log('✅ Created Stockfish using module.Stockfish()');
+                }
+            } else if (module.default && typeof module.default === 'object') {
+                // Module.default might already be an instance
+                stockfish = module.default;
+                console.log('✅ Using module.default as Stockfish instance');
+            } else if (typeof module === 'function') {
+                // The module itself might be the constructor
+                try {
+                    stockfish = new module();
+                    console.log('✅ Created Stockfish using new module()');
+                } catch (e) {
+                    stockfish = module();
+                    console.log('✅ Created Stockfish using module()');
+                }
+            } else {
+                // Last resort - look for any function in the module
+                for (const key of Object.keys(module)) {
+                    if (typeof module[key] === 'function' && key.toLowerCase().includes('stockfish')) {
+                        try {
+                            stockfish = new module[key]();
+                            console.log(`✅ Created Stockfish using new module.${key}()`);
+                            break;
+                        } catch (e) {
+                            stockfish = module[key]();
+                            console.log(`✅ Created Stockfish using module.${key}()`);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!stockfish) {
+                console.error('❌ Could not create Stockfish instance. Module structure:', module);
+                throw new Error('Failed to instantiate Stockfish from module');
+            }
+
+            console.log('🔍 Stockfish instance type:', typeof stockfish);
+            console.log('🔍 Stockfish instance:', stockfish);
+
+            // Create engine wrapper if StockfishWrapper is available
+            if (window.StockfishWrapper) {
+                const wrapper = new StockfishWrapper();
+                await wrapper.initialize(stockfish);
+
+                // Create engine interface
+                const engine = new LichessStockfishEngine(wrapper);
+            } else {
+                // Fallback to direct usage
+                console.warn('StockfishWrapper not found, using direct interface');
+                const engine = new LichessStockfishEngine(stockfish);
+            }
+
+            // Initialize the engine
+            await engine.initialize();
+
+            // Store engine
+            this.engines.set('lichess-stockfish', engine);
+            this.activeEngine = engine;
+
+            // Set up error handler
+            engine.onError = (error) => {
+                console.error('❌ Lichess Stockfish error:', error);
+                this.onEngineError(error);
             };
+
+            console.log('✅ Lichess Stockfish loaded successfully');
+            return engine;
 
         } catch (error) {
-            console.error(`❌ Failed to load ${engineInfo.name}:`, error);
-            return {
-                success: false,
-                engine: engineInfo,
-                error: error.message
-            };
+            console.error('❌ Failed to load Lichess Stockfish:', error);
+            throw error;
         }
     }
 
-    async loadLichessStockfish(engineInfo) {
-        console.log('🔄 Loading Lichess Stockfish ES Module...');
-        return new Promise(async (resolve, reject) => {
-            try {
-                // First check CORS headers
-                if (!this.checkCORSHeaders()) {
-                    throw new Error('CORS headers required for Stockfish WASM. Please add Cross-Origin-Embedder-Policy and Cross-Origin-Opener-Policy headers to your server.');
-                }
-
-                // Find available Stockfish files
-                const availableFiles = await this.findStockfishFiles();
-                if (availableFiles.length === 0) {
-                    throw new Error('No Stockfish files found. Please ensure sf171-79.js and sf171-79.wasm are in /js/stockfish/');
-                }
-
-                const stockfishFile = availableFiles[0];
-                console.log(`🔄 Loading Stockfish ES module: ${stockfishFile}`);
-
-                // Dynamic import the ES module
-                const moduleUrl = `/js/stockfish/${stockfishFile}`;
-                console.log(`🔄 Importing module from: ${moduleUrl}`);
-
-                const stockfishModule = await import(moduleUrl);
-                console.log('✅ ES Module imported successfully');
-                console.log('🔍 Module exports:', Object.keys(stockfishModule));
-
-                // Get the default export (should be the Stockfish factory function)
-                const StockfishFactory = stockfishModule.default;
-                if (typeof StockfishFactory !== 'function') {
-                    throw new Error(`Invalid Stockfish module. Expected function, got ${typeof StockfishFactory}`);
-                }
-
-                console.log('🔄 Creating Stockfish instance...');
-                const stockfish = await StockfishFactory();
-                console.log('✅ Stockfish instance created');
-                console.log('🔍 Stockfish instance methods:', Object.getOwnPropertyNames(stockfish));
-
-                const engine = new LichessStockfishEngine(stockfish, engineInfo);
-
-                engine.onReady = () => {
-                    console.log('✅ Lichess Stockfish ready!');
-                    resolve(engine);
-                };
-                engine.onError = (error) => {
-                    console.error('❌ Lichess Stockfish error:', error);
-                    reject(error);
-                };
-
-                await engine.initialize();
-
-            } catch (error) {
-                console.error('❌ Failed to load Lichess Stockfish:', error);
-
-                // Provide helpful error messages
-                let errorMessage = error.message;
-                if (error.message.includes('import.meta')) {
-                    errorMessage = 'ES Module import.meta not supported. Try adding CORS headers or use the JS Engine instead.';
-                } else if (error.message.includes('SharedArrayBuffer')) {
-                    errorMessage = 'SharedArrayBuffer not available. Please add CORS headers: Cross-Origin-Embedder-Policy: require-corp and Cross-Origin-Opener-Policy: same-origin';
-                } else if (error.message.includes('Dynamic module import')) {
-                    errorMessage = 'Dynamic module import disabled. Please add CORS headers or try JS Engine.';
-                }
-
-                reject(new Error(`Lichess Stockfish loading failed: ${errorMessage}`));
-            }
-        });
+    async loadStockfishNNUE() {
+        // Placeholder for alternative engine
+        console.log('📢 Stockfish NNUE not implemented yet');
+        throw new Error('Stockfish NNUE not implemented');
     }
 
-    checkCORSHeaders() {
-        // Check if we're in a cross-origin isolated context
-        try {
-            return typeof SharedArrayBuffer !== 'undefined' &&
-                typeof Atomics !== 'undefined' &&
-                window.crossOriginIsolated === true;
-        } catch (e) {
-            return false;
-        }
+    getActiveEngine() {
+        return this.activeEngine;
     }
 
-    async findStockfishFiles() {
-        const possibleFiles = [
-            'sf171-79.js',
-            'sf16-7.js',
-            'stockfish.js'
-        ];
-
-        const availableFiles = [];
-        for (const file of possibleFiles) {
-            try {
-                const response = await fetch(`/js/stockfish/${file}`, { method: 'HEAD' });
-                if (response.ok) {
-                    availableFiles.push(file);
-                    console.log(`✅ Found: ${file}`);
-                }
-            } catch (e) {
-                console.log(`❌ Not found: ${file}`);
-            }
-        }
-        return availableFiles;
-    }
-
-    async loadJSEngine(engineInfo) {
-        console.log('🔄 Loading JS Chess Engine...');
-        return new Promise((resolve) => {
-            const engine = new JSChessEngine(engineInfo);
-            setTimeout(() => {
-                engine.isReady = true;
-                console.log('✅ JS Chess Engine ready!');
-                resolve(engine);
-            }, 100);
-        });
-    }
-
-    async unloadCurrentEngine() {
-        if (this.currentEngine) {
-            this.stopAnalysis();
-            if (this.currentEngine.destroy) {
-                this.currentEngine.destroy();
-            }
-            this.currentEngine = null;
-            this.currentEngineId = null;
-        }
-    }
-
-    startAnalysis(fen, callback, options = {}) {
-        if (!this.currentEngine) {
-            throw new Error('No engine loaded');
-        }
-
-        this.stopAnalysis();
-        this.isAnalyzing = true;
-        this.analysisCallback = callback;
-
-        this.currentEngine.startAnalysis(fen, (analysis) => {
-            if (this.analysisCallback && this.isAnalyzing) {
-                this.analysisCallback({
-                    ...analysis,
-                    engineId: this.currentEngineId,
-                    engineName: this.engines.get(this.currentEngineId).name
-                });
-            }
-        }, options);
-    }
-
-    stopAnalysis() {
-        this.isAnalyzing = false;
-        if (this.currentEngine && this.currentEngine.stopAnalysis) {
-            this.currentEngine.stopAnalysis();
-        }
-        this.analysisCallback = null;
-    }
-
-    async getBestMove(fen, options = {}) {
-        if (!this.currentEngine) {
-            throw new Error('No engine loaded');
-        }
-        return await this.currentEngine.getBestMove(fen, options);
-    }
-
-    getCurrentEngine() {
-        return {
-            id: this.currentEngineId,
-            info: this.currentEngineId ? this.engines.get(this.currentEngineId) : null,
-            instance: this.currentEngine
-        };
+    onEngineError(error) {
+        console.error('📢 ERROR:', error.message);
     }
 }
 
-// Lichess Stockfish Engine with proper API detection
+// Lichess Stockfish Engine Wrapper
 class LichessStockfishEngine {
-    constructor(stockfish, engineInfo) {
-        this.stockfish = stockfish;
-        this.info = engineInfo;
+    constructor(wrapper) {
+        this.wrapper = wrapper;
         this.isReady = false;
-        this.isAnalyzing = false;
-        this.analysisCallback = null;
-        this.onReady = null;
+        this.messageHandlers = new Map();
+        this.currentEval = null;
         this.onError = null;
+
+        // Set up message handler
+        this.wrapper.addMessageHandler((message) => {
+            this.handleMessage(message);
+        });
     }
 
     async initialize() {
+        console.log('🔄 Initializing Lichess Stockfish engine interface...');
+
         try {
-            console.log('🔄 Initializing Lichess Stockfish...');
-            console.log('🔍 Available methods:', Object.getOwnPropertyNames(this.stockfish));
-
-            // Try different API approaches
-            if (typeof this.stockfish.addMessageListener === 'function') {
-                console.log('✅ Using addMessageListener API');
-                this.stockfish.addMessageListener((message) => {
-                    this.handleMessage(message);
-                });
-            } else if (typeof this.stockfish.addEventListener === 'function') {
-                console.log('✅ Using addEventListener API');
-                this.stockfish.addEventListener('message', (event) => {
-                    this.handleMessage(event.data);
-                });
-            } else if (this.stockfish.onmessage !== undefined) {
-                console.log('✅ Using onmessage API');
-                this.stockfish.onmessage = (event) => {
-                    this.handleMessage(event.data);
-                };
-            } else {
-                throw new Error('No supported message API found on Stockfish instance');
-            }
-
-            console.log('🔄 Sending UCI initialization...');
-
-            // Check if postMessage exists
-            if (typeof this.stockfish.postMessage !== 'function') {
-                throw new Error('postMessage method not available on Stockfish instance');
-            }
-
-            this.stockfish.postMessage('uci');
+            // Engine is already initialized via wrapper
+            this.isReady = true;
+            console.log('✅ Lichess Stockfish engine interface ready');
 
         } catch (error) {
-            console.error('❌ Failed to initialize Lichess Stockfish:', error);
-            if (this.onError) {
-                this.onError(error);
-            }
+            console.error('❌ Failed to initialize engine interface:', error);
+            if (this.onError) this.onError(error);
+            throw error;
         }
+    }
+
+    setupListenAPI() {
+        // For modern Stockfish with listen API
+        this.stockfish.listen((message) => {
+            this.handleMessage(message);
+        });
+
+        // Create a custom postMessage method for sending commands
+        this.postMessage = (command) => {
+            // Some Stockfish builds might still have postMessage even with listen
+            if (this.stockfish.postMessage) {
+                this.stockfish.postMessage(command);
+            } else if (this.stockfish.send) {
+                this.stockfish.send(command);
+            } else {
+                // Try calling the stockfish instance directly
+                this.stockfish(command);
+            }
+        };
+    }
+
+    setupMessageListenerAPI() {
+        // For Stockfish with addMessageListener
+        this.stockfish.addMessageListener((message) => {
+            this.handleMessage(message);
+        });
+
+        this.postMessage = (command) => {
+            this.stockfish.postMessage(command);
+        };
+    }
+
+    setupPostMessageAPI() {
+        // For traditional Stockfish with Worker-like API
+        this.stockfish.onmessage = (event) => {
+            this.handleMessage(event.data);
+        };
+
+        this.postMessage = (command) => {
+            this.stockfish.postMessage(command);
+        };
+    }
+
+    setupCmdAPI() {
+        // For Stockfish with cmd API
+        if (this.stockfish.addMessageListener) {
+            this.stockfish.addMessageListener((message) => {
+                this.handleMessage(message);
+            });
+        }
+
+        this.postMessage = (command) => {
+            this.stockfish.cmd(command);
+        };
+    }
+
+    setupCallableAPI() {
+        // For Stockfish that is directly callable
+        // Set up a message listener if available
+        if (this.stockfish.listen) {
+            this.stockfish.listen((message) => {
+                this.handleMessage(message);
+            });
+        } else if (this.stockfish.addMessageListener) {
+            this.stockfish.addMessageListener((message) => {
+                this.handleMessage(message);
+            });
+        }
+
+        // The stockfish instance itself is callable
+        this.postMessage = (command) => {
+            this.stockfish(command);
+        };
+    }
+
+    setupWorkerAPI() {
+        // For Web Worker-based Stockfish
+        this.stockfish.onmessage = (event) => {
+            this.handleMessage(event.data);
+        };
+
+        this.postMessage = (command) => {
+            this.stockfish.postMessage(command);
+        };
+    }
+
+    setupEventListenerAPI() {
+        // For Stockfish with addEventListener
+        this.stockfish.addEventListener('message', (event) => {
+            this.handleMessage(event.data);
+        });
+
+        this.postMessage = (command) => {
+            if (this.stockfish.postMessage) {
+                this.stockfish.postMessage(command);
+            } else if (typeof this.stockfish === 'function') {
+                this.stockfish(command);
+            }
+        };
     }
 
     handleMessage(message) {
-        console.log(`${this.info.name} >>`, message);
+        console.log('Engine:', message);
 
+        // Handle UCI initialization
         if (message === 'uciok') {
-            console.log('🔄 UCI OK received, configuring engine...');
-            this.stockfish.postMessage('setoption name Threads value 1');
-            this.stockfish.postMessage('setoption name Hash value 32');
-            this.stockfish.postMessage('isready');
-        } else if (message === 'readyok') {
-            console.log('✅ Stockfish ready!');
             this.isReady = true;
-            if (this.onReady) this.onReady();
-        } else if (message.startsWith('info')) {
-            this.parseStockfishInfo(message);
-        } else if (message.startsWith('bestmove')) {
-            this.parseBestMove(message);
+            this.resolveReady();
+        }
+
+        // Handle readyok
+        if (message === 'readyok') {
+            this.resolveIsReady();
+        }
+
+        // Handle best move
+        if (message.startsWith('bestmove')) {
+            const parts = message.split(' ');
+            const bestMove = parts[1];
+            const ponderMove = parts[3];
+
+            if (this.messageHandlers.has('bestmove')) {
+                this.messageHandlers.get('bestmove')({ bestMove, ponderMove });
+            }
+        }
+
+        // Handle evaluation info
+        if (message.startsWith('info')) {
+            this.parseInfo(message);
         }
     }
 
-    parseStockfishInfo(info) {
-        const analysis = this.parseInfoLine(info);
-        if (analysis && this.analysisCallback) {
-            this.analysisCallback(analysis);
-        }
-    }
+    parseInfo(message) {
+        const parts = message.split(' ');
+        const info = {};
 
-    parseInfoLine(info) {
-        const parts = info.split(' ');
-        const analysis = {};
-
-        for (let i = 0; i < parts.length; i++) {
+        for (let i = 1; i < parts.length; i++) {
             switch (parts[i]) {
                 case 'depth':
-                    analysis.depth = parseInt(parts[i + 1]);
+                    info.depth = parseInt(parts[++i]);
                     break;
                 case 'score':
                     if (parts[i + 1] === 'cp') {
-                        analysis.evaluation = parseInt(parts[i + 2]) / 100;
+                        info.score = parseInt(parts[i + 2]) / 100;
+                        i += 2;
                     } else if (parts[i + 1] === 'mate') {
-                        analysis.mate = parseInt(parts[i + 2]);
+                        info.score = `M${parts[i + 2]}`;
+                        i += 2;
                     }
                     break;
                 case 'nodes':
-                    analysis.nodes = parseInt(parts[i + 1]);
+                    info.nodes = parseInt(parts[++i]);
                     break;
                 case 'nps':
-                    analysis.nps = parseInt(parts[i + 1]);
+                    info.nps = parseInt(parts[++i]);
+                    break;
+                case 'time':
+                    info.time = parseInt(parts[++i]);
                     break;
                 case 'pv':
-                    analysis.pv = parts.slice(i + 1).join(' ');
+                    info.pv = parts.slice(i + 1).join(' ');
+                    i = parts.length;
                     break;
             }
         }
 
-        return Object.keys(analysis).length > 0 ? analysis : null;
-    }
+        this.currentEval = info;
 
-    parseBestMove(message) {
-        const parts = message.split(' ');
-        const bestMove = parts[1];
-
-        if (this.analysisCallback) {
-            this.analysisCallback({
-                bestMove: bestMove,
-                finished: true
-            });
+        if (this.messageHandlers.has('info')) {
+            this.messageHandlers.get('info')(info);
         }
     }
 
-    startAnalysis(fen, callback, options = {}) {
-        if (!this.isReady) {
-            console.warn('Stockfish not ready yet');
-            return;
-        }
-
-        this.isAnalyzing = true;
-        this.analysisCallback = callback;
-
-        const depth = options.depth || 15;
-
-        try {
-            this.stockfish.postMessage('stop');
-            this.stockfish.postMessage(`position fen ${fen}`);
-            this.stockfish.postMessage(`go depth ${depth}`);
-        } catch (error) {
-            console.error('Error starting analysis:', error);
-            if (this.onError) this.onError(error);
-        }
+    async sendCommand(command) {
+        console.log('→', command);
+        this.wrapper.send(command);
     }
 
-    stopAnalysis() {
-        this.isAnalyzing = false;
-        this.analysisCallback = null;
-        try {
-            if (this.stockfish) {
-                this.stockfish.postMessage('stop');
-            }
-        } catch (error) {
-            console.error('Error stopping analysis:', error);
-        }
-    }
+    async waitForReady() {
+        if (this.isReady) return;
 
-    async getBestMove(fen, options = {}) {
         return new Promise((resolve) => {
-            const timeMs = options.timeMs || 1000;
-
-            try {
-                this.stockfish.postMessage('stop');
-                this.stockfish.postMessage(`position fen ${fen}`);
-                this.stockfish.postMessage(`go movetime ${timeMs}`);
-
-                const originalCallback = this.analysisCallback;
-                this.analysisCallback = (analysis) => {
-                    if (analysis.bestMove && analysis.finished) {
-                        resolve(analysis.bestMove);
-                        this.analysisCallback = originalCallback;
-                    }
-                };
-            } catch (error) {
-                console.error('Error getting best move:', error);
-                resolve('none');
-            }
-        });
-    }
-
-    destroy() {
-        this.stopAnalysis();
-        this.stockfish = null;
-    }
-}
-
-// Enhanced JavaScript Chess Engine (same as before)
-class JSChessEngine {
-    constructor(engineInfo) {
-        this.info = engineInfo;
-        this.isReady = false;
-        this.isAnalyzing = false;
-        this.analysisCallback = null;
-        this.pieceValues = { 'p': 1, 'n': 3, 'b': 3, 'r': 5, 'q': 9, 'k': 0 };
-    }
-
-    startAnalysis(fen, callback, options = {}) {
-        if (!this.isReady) return;
-
-        this.isAnalyzing = true;
-        this.analysisCallback = callback;
-
-        setTimeout(() => {
-            if (!this.isAnalyzing) return;
-
-            const evaluation = this.evaluatePosition(fen);
-            const bestMove = this.findBestMove(fen);
-
-            if (this.analysisCallback) {
-                this.analysisCallback({
-                    depth: 5,
-                    evaluation: evaluation,
-                    bestMove: bestMove,
-                    nodes: Math.floor(Math.random() * 50000) + 10000,
-                    nps: Math.floor(Math.random() * 100000) + 50000,
-                    pv: bestMove + ' ' + this.generateRandomMove() + ' ' + this.generateRandomMove(),
-                    finished: true
-                });
-            }
-        }, 800 + Math.random() * 1200);
-    }
-
-    stopAnalysis() {
-        this.isAnalyzing = false;
-        this.analysisCallback = null;
-    }
-
-    async getBestMove(fen, options = {}) {
-        return new Promise((resolve) => {
+            this.resolveReady = resolve;
             setTimeout(() => {
-                resolve(this.findBestMove(fen));
-            }, 500);
+                if (!this.isReady) {
+                    console.warn('⚠️ Engine ready timeout, continuing anyway');
+                    this.isReady = true;
+                    resolve();
+                }
+            }, 5000);
         });
     }
 
-    evaluatePosition(fen) {
-        const pieces = fen.split(' ')[0];
-        let material = 0;
+    async isready() {
+        await this.sendCommand('isready');
+        return new Promise((resolve) => {
+            this.resolveIsReady = resolve;
+            setTimeout(resolve, 1000); // Timeout after 1 second
+        });
+    }
 
-        for (let char of pieces) {
-            if (char.match(/[a-z]/)) {
-                material -= this.pieceValues[char] || 0;
-            } else if (char.match(/[A-Z]/)) {
-                material += this.pieceValues[char.toLowerCase()] || 0;
-            }
+    async setPosition(fen = 'startpos', moves = []) {
+        let command = 'position ';
+        if (fen === 'startpos') {
+            command += 'startpos';
+        } else {
+            command += `fen ${fen}`;
         }
 
-        return material + (Math.random() - 0.5) * 1.5;
+        if (moves.length > 0) {
+            command += ' moves ' + moves.join(' ');
+        }
+
+        await this.sendCommand(command);
     }
 
-    findBestMove(fen) {
-        const commonMoves = ['e2e4', 'e7e5', 'd2d4', 'd7d5', 'g1f3', 'b8c6', 'f1c4', 'f8c5'];
-        return commonMoves[Math.floor(Math.random() * commonMoves.length)];
+    async analyze(options = {}) {
+        const {
+            depth = 20,
+            nodes = null,
+            moveTime = null,
+            infinite = false
+        } = options;
+
+        let command = 'go';
+
+        if (infinite) {
+            command += ' infinite';
+        } else {
+            if (depth) command += ` depth ${depth}`;
+            if (nodes) command += ` nodes ${nodes}`;
+            if (moveTime) command += ` movetime ${moveTime}`;
+        }
+
+        await this.sendCommand(command);
+
+        return new Promise((resolve) => {
+            this.messageHandlers.set('bestmove', (result) => {
+                this.messageHandlers.delete('bestmove');
+                resolve(result);
+            });
+        });
     }
 
-    generateRandomMove() {
-        const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-        const ranks = ['1', '2', '3', '4', '5', '6', '7', '8'];
+    async stop() {
+        await this.sendCommand('stop');
+    }
 
-        const from = files[Math.floor(Math.random() * 8)] + ranks[Math.floor(Math.random() * 8)];
-        const to = files[Math.floor(Math.random() * 8)] + ranks[Math.floor(Math.random() * 8)];
+    async setOption(name, value) {
+        await this.sendCommand(`setoption name ${name} value ${value}`);
+    }
 
-        return from + to;
+    onInfo(callback) {
+        this.messageHandlers.set('info', callback);
     }
 
     destroy() {
-        this.stopAnalysis();
+        if (this.stockfish.terminate) {
+            this.stockfish.terminate();
+        }
+        this.messageHandlers.clear();
     }
 }
 
-// Global engine manager
-let engineManager = null;
+// Initialize engine manager
+window.chessEngineManager = new ChessEngineManager();
 
-// Initialize when DOM is ready
-document.addEventListener('DOMContentLoaded', function () {
-    try {
-        engineManager = new ChessEngineManager();
-        initializeEngineUI();
-        console.log('✅ Chess engine system ready');
-    } catch (error) {
-        console.error('❌ Failed to initialize engine manager:', error);
-    }
-});
-
-// UI Functions
-function initializeEngineUI() {
-    createEngineSelector();
-    updateEngineStatus('no-engine', 'No engine loaded');
+// Export for use in other scripts
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { ChessEngineManager, LichessStockfishEngine };
 }
 
-function createEngineSelector() {
-    const engines = engineManager.getAvailableEngines();
-    const selectorHTML = engines.map(engine => `
-        <option value="${engine.id}" data-strength="${engine.strength}" data-type="${engine.type}">
-            ${engine.name} (${engine.strength} Elo)
-        </option>
-    `).join('');
-
-    const engineSelect = document.getElementById('engineSelect');
-    if (engineSelect) {
-        engineSelect.innerHTML = '<option value="">Choose Engine...</option>' + selectorHTML;
-        engineSelect.addEventListener('change', handleEngineChange);
-    }
-}
-
-function startEngineAnalysis() {
-    if (!engineManager || !engineManager.currentEngine) {
-        console.warn('No engine available for analysis');
-        return;
-    }
-
-    updateEngineStatus('analyzing', 'Analyzing...');
-
-    const fen = window.currentFen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-
-    engineManager.startAnalysis(fen, (analysis) => {
-        updateAnalysisDisplay(analysis);
-
-        if (analysis.finished) {
-            updateEngineStatus('connected', `${analysis.engineName} Ready`);
-        }
-    });
-}
-
-function toggleAnalysis() {
-    window.analysisEnabled = !window.analysisEnabled;
-
-    const analysisToggle = document.getElementById('analysisToggle');
-
-    if (window.analysisEnabled) {
-        if (analysisToggle) analysisToggle.innerHTML = '<i class="fas fa-brain"></i> Analysis: ON';
-        startEngineAnalysis();
-        showNotification('Engine analysis enabled', 'success');
-    } else {
-        if (analysisToggle) analysisToggle.innerHTML = '<i class="fas fa-brain"></i> Analysis: OFF';
-        if (engineManager) {
-            engineManager.stopAnalysis();
-        }
-        const currentEngine = engineManager?.getCurrentEngine();
-        const engineName = currentEngine?.info?.name || 'Engine';
-        updateEngineStatus('connected', `${engineName} Ready (Analysis OFF)`);
-        showNotification('Engine analysis disabled', 'info');
-    }
-}
-
-// Helper functions
-function updateAnalysisDisplay(analysis) {
-    console.log('📊 Analysis update:', analysis);
-
-    if (analysis.evaluation !== undefined) {
-        const evalElement = document.getElementById('evaluation');
-        if (evalElement) {
-            const evalText = analysis.evaluation > 0 ?
-                `+${analysis.evaluation.toFixed(2)}` :
-                analysis.evaluation.toFixed(2);
-            evalElement.textContent = evalText;
-            evalElement.className = `badge ${analysis.evaluation > 0.5 ? 'bg-success' :
-                analysis.evaluation < -0.5 ? 'bg-danger' : 'bg-secondary'}`;
-        }
-
-        const evalBar = document.getElementById('evalIndicator');
-        if (evalBar) {
-            const percentage = Math.max(0, Math.min(100, 50 + (analysis.evaluation * 10)));
-            evalBar.style.left = `${percentage}%`;
-        }
-    }
-
-    if (analysis.mate !== undefined) {
-        const evalElement = document.getElementById('evaluation');
-        if (evalElement) {
-            evalElement.textContent = `M${Math.abs(analysis.mate)}`;
-            evalElement.className = `badge ${analysis.mate > 0 ? 'bg-success' : 'bg-danger'}`;
-        }
-    }
-
-    if (analysis.bestMove && analysis.bestMove !== 'none') {
-        const bestMoveElement = document.getElementById('best-move');
-        if (bestMoveElement) {
-            bestMoveElement.textContent = analysis.bestMove;
-        }
-    }
-
-    if (analysis.depth) {
-        const depthElement = document.getElementById('depth');
-        if (depthElement) {
-            depthElement.textContent = analysis.depth;
-        }
-    }
-
-    if (analysis.nodes) {
-        const nodesElement = document.getElementById('nodes');
-        if (nodesElement) {
-            nodesElement.textContent = analysis.nodes.toLocaleString();
-        }
-    }
-
-    if (analysis.nps) {
-        const npsElement = document.getElementById('nps');
-        if (npsElement) {
-            npsElement.textContent = Math.floor(analysis.nps / 1000) + 'k';
-        }
-    }
-
-    if (analysis.pv) {
-        const pvElement = document.getElementById('pv-line');
-        if (pvElement) {
-            const moves = analysis.pv.split(' ').slice(0, 6);
-            pvElement.textContent = moves.join(' ');
-        }
-    }
-}
-
-function updateEngineStatus(status, text) {
-    console.log(`🔧 Engine status: ${status} - ${text}`);
-
-    const statusIndicator = document.getElementById('engineStatus');
-    const statusText = document.getElementById('engineStatusText');
-
-    if (statusIndicator) {
-        statusIndicator.className = `status-indicator status-${status}`;
-    }
-    if (statusText) {
-        statusText.textContent = text;
-    }
-}
-
-async function handleEngineChange(event) {
-    const engineId = event.target.value;
-
-    if (!engineId) {
-        updateEngineStatus('no-engine', 'No engine loaded');
-        return;
-    }
-
-    const engineInfo = engineManager.getEngineInfo(engineId);
-    updateEngineStatus('loading', `Loading ${engineInfo.name}...`);
-
-    try {
-        const result = await engineManager.loadEngine(engineId);
-
-        if (result.success) {
-            updateEngineStatus('connected', `${result.engine.name} Ready`);
-            showNotification(result.message, 'success');
-
-            if (window.analysisEnabled) {
-                startEngineAnalysis();
-            }
-        } else {
-            updateEngineStatus('error', 'Engine Load Failed');
-            showNotification(`Failed: ${result.error}`, 'error');
-        }
-    } catch (error) {
-        updateEngineStatus('error', 'Engine Load Failed');
-        showNotification(`Error: ${error.message}`, 'error');
-    }
-}
-
-function showNotification(message, type = 'info') {
-    console.log(`📢 ${type.toUpperCase()}: ${message}`);
-
-    const notification = document.createElement('div');
-    notification.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
-    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-    notification.innerHTML = `${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
-
-    document.body.appendChild(notification);
-
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.remove();
-        }
-    }, 5000);
-}
-
-// Export for global use
-window.engineManager = engineManager;
-
-console.log('✅ ES Module Lichess Stockfish engine manager loaded!');
+console.log('✅ Improved Lichess Stockfish engine manager loaded!');

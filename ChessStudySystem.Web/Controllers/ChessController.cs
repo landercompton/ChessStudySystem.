@@ -9,6 +9,11 @@ namespace ChessStudySystem.Web.Controllers
             return View();
         }
 
+        public IActionResult Test()
+        {
+            return View();
+        }
+
         [HttpPost]
         public IActionResult MakeMove([FromBody] MakeMoveRequest request)
         {

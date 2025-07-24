@@ -1,20 +1,32 @@
-﻿// Chess Study JavaScript - Local Chessground 9.2.3
+﻿// No changes needed to loadChessEngines - keep it simple
+// The chess-engines.js and stockfish-wrapper.js will handle all the complexity// Chess Study JavaScript with Fixed Engine Integration
 let board;
 let currentFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 let moveHistory = [];
 let currentMoveIndex = -1;
 let analysisEnabled = true;
 let engineConnected = false;
+let currentEngine = null;
 
 // Wait for local Chessground to load
 function waitForChessground() {
     if (window.chessgroundLoaded && typeof window.Chessground === 'function') {
         console.log('Local Chessground 9.2.3 ready!');
         initializeChessboard();
+
+        // Connect to engine after board is ready
+        setTimeout(() => {
+            connectToEngine();
+        }, 500);
     } else {
         window.addEventListener('chessgroundReady', function () {
             console.log('Local Chessground 9.2.3 ready via event!');
             initializeChessboard();
+
+            // Connect to engine after board is ready
+            setTimeout(() => {
+                connectToEngine();
+            }, 500);
         });
     }
 }
@@ -48,7 +60,8 @@ function initializeChessboard() {
         },
         drawable: {
             enabled: true,
-            visible: true
+            visible: true,
+            autoShapes: []
         },
         highlight: {
             lastMove: true,
@@ -74,11 +87,6 @@ function initializeChessboard() {
 
     updateLegalMoves();
     updatePositionInfo();
-
-    // Simulate engine connection after a delay
-    setTimeout(() => {
-        simulateEngineConnection();
-    }, 1000);
 }
 
 function initializeUI() {
@@ -94,7 +102,364 @@ function initializeUI() {
     }
 }
 
-function onMoveComplete(orig, dest, metadata) {
+// Engine connection and management
+async function connectToEngine() {
+    try {
+        // Create inline engine manager if needed
+        if (!window.simpleEngineManager) {
+            console.log('Creating inline engine manager...');
+
+            // Create the engine classes inline
+            window.LichessStockfishEngine = class {
+                constructor() {
+                    this.instance = null;
+                    this.isReady = false;
+                    this.messageHandlers = new Map();
+                    this.currentEval = null;
+                }
+
+                async initialize() {
+                    console.log('🔄 Initializing Lichess Stockfish...');
+
+                    try {
+                        // Import the module
+                        const module = await import('/js/stockfish/sf171-79.js');
+                        console.log('✅ Module loaded');
+
+                        // The module.default is a function that returns a promise
+                        this.instance = await module.default();
+                        console.log('✅ Stockfish instance created');
+
+                        // Set up the listen handler
+                        if (this.instance.listen) {
+                            this.instance.listen = (message) => {
+                                this.handleMessage(message);
+                            };
+                            console.log('✅ Listen handler configured');
+                        }
+
+                        // Send initial UCI command
+                        this.sendCommand('uci');
+
+                        // Wait for initialization
+                        await this.waitForReady();
+
+                        console.log('✅ Lichess Stockfish initialized successfully');
+
+                    } catch (error) {
+                        console.error('❌ Failed to initialize Lichess Stockfish:', error);
+                        throw error;
+                    }
+                }
+
+                handleMessage(message) {
+                    console.log('Engine:', message);
+
+                    // Handle UCI initialization
+                    if (message === 'uciok') {
+                        this.isReady = true;
+                        if (this.readyResolver) {
+                            this.readyResolver();
+                            this.readyResolver = null;
+                        }
+                    }
+
+                    // Handle readyok
+                    if (message === 'readyok') {
+                        if (this.isReadyResolver) {
+                            this.isReadyResolver();
+                            this.isReadyResolver = null;
+                        }
+                    }
+
+                    // Handle best move
+                    if (message.startsWith('bestmove')) {
+                        const parts = message.split(' ');
+                        const bestMove = parts[1];
+                        const ponderMove = parts[3];
+
+                        if (this.messageHandlers.has('bestmove')) {
+                            this.messageHandlers.get('bestmove')({ bestMove, ponderMove });
+                        }
+                    }
+
+                    // Handle evaluation info
+                    if (message.startsWith('info')) {
+                        this.parseInfo(message);
+                    }
+                }
+
+                parseInfo(message) {
+                    const parts = message.split(' ');
+                    const info = {};
+
+                    for (let i = 1; i < parts.length; i++) {
+                        switch (parts[i]) {
+                            case 'depth':
+                                info.depth = parseInt(parts[++i]);
+                                break;
+                            case 'score':
+                                if (parts[i + 1] === 'cp') {
+                                    info.score = parseInt(parts[i + 2]) / 100;
+                                    i += 2;
+                                } else if (parts[i + 1] === 'mate') {
+                                    info.score = `M${parts[i + 2]}`;
+                                    i += 2;
+                                }
+                                break;
+                            case 'nodes':
+                                info.nodes = parseInt(parts[++i]);
+                                break;
+                            case 'nps':
+                                info.nps = parseInt(parts[++i]);
+                                break;
+                            case 'time':
+                                info.time = parseInt(parts[++i]);
+                                break;
+                            case 'pv':
+                                info.pv = parts.slice(i + 1).join(' ');
+                                i = parts.length;
+                                break;
+                        }
+                    }
+
+                    this.currentEval = info;
+
+                    if (this.messageHandlers.has('info')) {
+                        this.messageHandlers.get('info')(info);
+                    }
+                }
+
+                sendCommand(command) {
+                    console.log('→', command);
+                    if (this.instance && this.instance.uci) {
+                        this.instance.uci(command);
+                    } else {
+                        console.error('Cannot send command - uci method not available');
+                    }
+                }
+
+                async waitForReady() {
+                    if (this.isReady) return;
+
+                    return new Promise((resolve) => {
+                        this.readyResolver = resolve;
+                        // Timeout after 5 seconds
+                        setTimeout(() => {
+                            if (!this.isReady) {
+                                console.warn('⚠️ Engine ready timeout, continuing anyway');
+                                this.isReady = true;
+                                resolve();
+                            }
+                        }, 5000);
+                    });
+                }
+
+                async setPosition(fen = 'startpos', moves = []) {
+                    let command = 'position ';
+                    if (fen === 'startpos') {
+                        command += 'startpos';
+                    } else {
+                        command += `fen ${fen}`;
+                    }
+
+                    if (moves.length > 0) {
+                        command += ' moves ' + moves.join(' ');
+                    }
+
+                    this.sendCommand(command);
+                }
+
+                async analyze(options = {}) {
+                    const {
+                        depth = 20,
+                        nodes = null,
+                        moveTime = null,
+                        infinite = false
+                    } = options;
+
+                    let command = 'go';
+
+                    if (infinite) {
+                        command += ' infinite';
+                    } else {
+                        if (depth) command += ` depth ${depth}`;
+                        if (nodes) command += ` nodes ${nodes}`;
+                        if (moveTime) command += ` movetime ${moveTime}`;
+                    }
+
+                    this.sendCommand(command);
+
+                    return new Promise((resolve) => {
+                        this.messageHandlers.set('bestmove', (result) => {
+                            this.messageHandlers.delete('bestmove');
+                            resolve(result);
+                        });
+                    });
+                }
+
+                async stop() {
+                    this.sendCommand('stop');
+                }
+
+                onInfo(callback) {
+                    this.messageHandlers.set('info', callback);
+                }
+            };
+
+            window.simpleEngineManager = {
+                async loadEngine() {
+                    console.log('🔄 Loading Lichess Stockfish...');
+
+                    try {
+                        this.engine = new window.LichessStockfishEngine();
+                        await this.engine.initialize();
+
+                        console.log('✅ Engine loaded successfully');
+                        return this.engine;
+                    } catch (error) {
+                        console.error('❌ Failed to load engine:', error);
+                        throw error;
+                    }
+                },
+                getEngine() {
+                    return this.engine;
+                }
+            };
+        }
+
+        // Load the engine
+        currentEngine = await window.simpleEngineManager.loadEngine();
+
+        // Set up engine info handler
+        currentEngine.onInfo((info) => {
+            updateEngineAnalysis(info);
+        });
+
+        engineConnected = true;
+        updateEngineStatus('connected', 'Connected');
+
+        // Start analysis if enabled
+        if (analysisEnabled) {
+            requestEngineAnalysis();
+        }
+    } catch (error) {
+        console.error('❌ Failed to connect to engine:', error);
+        engineConnected = false;
+        updateEngineStatus('disconnected', 'Failed to connect');
+        showNotification('Failed to load chess engine: ' + error.message, 'error');
+    }
+}
+
+// Engine selection handler
+async function handleEngineChange(engineType) {
+    // For now, we only support the inline Lichess Stockfish
+    await connectToEngine();
+}
+
+function updateEngineStatus(status, text) {
+    const statusIndicator = document.getElementById('engineStatus');
+    const statusText = document.getElementById('engineStatusText');
+
+    if (statusIndicator) {
+        statusIndicator.className = `status-indicator status-${status}`;
+    }
+
+    if (statusText) {
+        statusText.textContent = text;
+    }
+}
+
+async function requestEngineAnalysis() {
+    if (!engineConnected || !currentEngine) return;
+
+    updateEngineStatus('analyzing', 'Analyzing...');
+
+    try {
+        // Set the current position
+        await currentEngine.setPosition(currentFen);
+
+        // Start analysis
+        const analysis = await currentEngine.analyze({
+            depth: 20,
+            moveTime: 1000 // Analyze for 1 second
+        });
+
+        updateEngineStatus('connected', 'Connected');
+
+        // Update UI with best move if found
+        if (analysis.bestMove) {
+            highlightBestMove(analysis.bestMove);
+        }
+    } catch (error) {
+        console.error('Analysis error:', error);
+        updateEngineStatus('connected', 'Connected');
+    }
+}
+
+function updateEngineAnalysis(info) {
+    const evalElement = document.getElementById('engineEvaluation');
+    const depthElement = document.getElementById('engineDepth');
+    const pvElement = document.getElementById('enginePV');
+
+    if (evalElement && info.score !== undefined) {
+        let evalText = '';
+        if (typeof info.score === 'string' && info.score.startsWith('M')) {
+            evalText = info.score; // Mate in X
+        } else {
+            evalText = info.score > 0 ? `+${info.score.toFixed(2)}` : info.score.toFixed(2);
+        }
+        evalElement.textContent = evalText;
+
+        // Update evaluation bar
+        updateEvaluationBar(info.score);
+    }
+
+    if (depthElement && info.depth) {
+        depthElement.textContent = `Depth: ${info.depth}`;
+    }
+
+    if (pvElement && info.pv) {
+        const moves = info.pv.split(' ').slice(0, 5).join(' ');
+        pvElement.textContent = `Line: ${moves}`;
+    }
+}
+
+function highlightBestMove(move) {
+    if (!board || move.length < 4) return;
+
+    const from = move.substring(0, 2);
+    const to = move.substring(2, 4);
+
+    board.setAutoShapes([
+        {
+            orig: from,
+            dest: to,
+            brush: 'blue'
+        }
+    ]);
+}
+
+function updateEvaluationBar(score) {
+    const indicator = document.querySelector('.evaluation-indicator');
+    if (!indicator) return;
+
+    let percentage = 50;
+
+    if (typeof score === 'number') {
+        // Convert score to percentage (cap at ±5.0)
+        const cappedScore = Math.max(-5, Math.min(5, score));
+        percentage = 50 + (cappedScore * 10);
+    } else if (typeof score === 'string' && score.startsWith('M')) {
+        // Mate score
+        const mateIn = parseInt(score.substring(1));
+        percentage = mateIn > 0 ? 95 : 5;
+    }
+
+    indicator.style.left = `${percentage}%`;
+}
+
+async function onMoveComplete(orig, dest, metadata) {
     console.log('Move made:', orig, dest);
 
     const move = orig + dest;
@@ -117,24 +482,13 @@ function onMoveComplete(orig, dest, metadata) {
     moveHistory.push(newMove);
     currentMoveIndex = moveHistory.length - 1;
 
-    // Send move to server for validation (if implemented)
-    validateMoveOnServer(move).then(data => {
-        if (data && data.success) {
-            currentFen = data.fen;
-            updateUI();
+    // Update UI
+    updateUI();
 
-            if (analysisEnabled) {
-                requestEngineAnalysis();
-            }
-        }
-    }).catch(error => {
-        console.log('Server validation not implemented, continuing with client-side');
-        updateUI();
-
-        if (analysisEnabled) {
-            requestEngineAnalysis();
-        }
-    });
+    // Trigger engine analysis if enabled
+    if (analysisEnabled && engineConnected) {
+        requestEngineAnalysis();
+    }
 }
 
 async function validateMoveOnServer(move) {
@@ -151,109 +505,12 @@ async function validateMoveOnServer(move) {
             })
         });
 
-        if (response.ok) {
-            return await response.json();
-        }
+        if (!response.ok) throw new Error('Server validation failed');
+
+        return await response.json();
     } catch (error) {
-        console.log('Server validation failed:', error);
-    }
-    return null;
-}
-
-function updateUI() {
-    updateMoveHistory();
-    updatePositionInfo();
-    updateLegalMoves();
-    updateMoveNavigation();
-}
-
-function updateLegalMoves() {
-    // TODO: Implement proper legal move generation
-    // For now, allow all moves
-    const dests = new Map();
-
-    board.set({
-        movable: {
-            ...board.state.movable,
-            dests: dests
-        }
-    });
-}
-
-function updateMoveHistory() {
-    const movesDiv = document.getElementById('moves');
-    const moveCountDiv = document.getElementById('moveCount');
-
-    if (!movesDiv) return;
-
-    moveCountDiv.textContent = moveHistory.length;
-
-    if (moveHistory.length === 0) {
-        movesDiv.innerHTML = '<div class="text-muted text-center">No moves yet</div>';
-        return;
-    }
-
-    movesDiv.innerHTML = '';
-
-    moveHistory.forEach((moveData, index) => {
-        const moveElement = document.createElement('div');
-        moveElement.className = `move-item ${index === currentMoveIndex ? 'active' : ''}`;
-
-        const moveNumber = Math.floor(index / 2) + 1;
-        const isWhiteMove = index % 2 === 0;
-        const prefix = isWhiteMove ? `${moveNumber}.` : '';
-
-        moveElement.innerHTML = `${prefix} ${moveData.san}`;
-        moveElement.onclick = () => goToMove(index);
-
-        movesDiv.appendChild(moveElement);
-    });
-
-    // Scroll to active move
-    const activeMove = movesDiv.querySelector('.move-item.active');
-    if (activeMove) {
-        activeMove.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-}
-
-function updatePositionInfo() {
-    // Update position information
-    const toMoveElement = document.getElementById('toMove');
-    const currentFENElement = document.getElementById('currentFEN');
-    const materialElement = document.getElementById('material');
-
-    if (toMoveElement) {
-        const isWhiteToMove = currentFen.includes(' w ');
-        toMoveElement.textContent = isWhiteToMove ? 'White' : 'Black';
-        toMoveElement.className = isWhiteToMove ? 'text-primary' : 'text-dark';
-    }
-
-    if (currentFENElement) {
-        currentFENElement.textContent = currentFen;
-    }
-
-    if (materialElement) {
-        // TODO: Calculate material balance
-        materialElement.textContent = 'Equal';
-    }
-}
-
-function updateMoveNavigation() {
-    // Enable/disable navigation buttons based on position in history
-    const prevButton = document.querySelector('[onclick="goToPreviousMove()"]');
-    const nextButton = document.querySelector('[onclick="goToNextMove()"]');
-    const endButton = document.querySelector('[onclick="goToEnd()"]');
-
-    if (prevButton) {
-        prevButton.disabled = currentMoveIndex <= -1;
-    }
-
-    if (nextButton) {
-        nextButton.disabled = currentMoveIndex >= moveHistory.length - 1;
-    }
-
-    if (endButton) {
-        endButton.disabled = currentMoveIndex >= moveHistory.length - 1;
+        // Server validation not implemented
+        return null;
     }
 }
 
@@ -263,10 +520,164 @@ function resetBoard() {
     moveHistory = [];
     currentMoveIndex = -1;
 
-    if (board) {
+    board.set({
+        fen: currentFen,
+        lastMove: null
+    });
+
+    updateUI();
+
+    if (analysisEnabled) {
+        requestEngineAnalysis();
+    }
+}
+
+function flipBoard() {
+    board.toggleOrientation();
+}
+
+async function toggleAnalysis() {
+    analysisEnabled = !analysisEnabled;
+    const button = document.getElementById('analysisToggle');
+
+    if (button) {
+        button.innerHTML = `<i class="fas fa-brain"></i> Analysis: ${analysisEnabled ? 'ON' : 'OFF'}`;
+        button.classList.toggle('btn-secondary', !analysisEnabled);
+    }
+
+    if (analysisEnabled && engineConnected) {
+        requestEngineAnalysis();
+    } else if (!analysisEnabled && currentEngine) {
+        if (currentEngine.stop) {
+            await currentEngine.stop();
+        }
+        board.setAutoShapes([]); // Clear best move highlight
+    }
+}
+
+// UI Update functions
+function updateUI() {
+    updateMoveList();
+    updatePositionInfo();
+    updateLegalMoves();
+}
+
+function updateMoveList() {
+    const moveListElement = document.getElementById('moves');
+    if (!moveListElement) return;
+
+    if (moveHistory.length === 0) {
+        moveListElement.innerHTML = '<div class="text-muted text-center">No moves yet</div>';
+        return;
+    }
+
+    let html = '';
+    moveHistory.forEach((move, index) => {
+        const moveNumber = Math.floor(index / 2) + 1;
+        const isWhite = index % 2 === 0;
+
+        if (isWhite) {
+            html += `<div class="move-pair">`;
+            html += `<span class="move-number">${moveNumber}.</span> `;
+        }
+
+        html += `<span class="move-item ${index === currentMoveIndex ? 'active' : ''}" 
+                      onclick="goToMove(${index})">${move.san}</span> `;
+
+        if (!isWhite || index === moveHistory.length - 1) {
+            html += `</div>`;
+        }
+    });
+
+    moveListElement.innerHTML = html;
+}
+
+function updatePositionInfo() {
+    const parts = currentFen.split(' ');
+    const toMove = parts[1] === 'w' ? 'White' : 'Black';
+
+    const toMoveElement = document.getElementById('toMove');
+    if (toMoveElement) {
+        toMoveElement.textContent = toMove;
+        toMoveElement.className = toMove === 'White' ? 'text-primary' : 'text-dark';
+    }
+
+    const fenElement = document.getElementById('currentFEN');
+    if (fenElement) {
+        fenElement.textContent = currentFen;
+    }
+}
+
+function updateLegalMoves() {
+    // This would normally calculate legal moves
+    // For now, allow all moves in analysis mode
+    const dests = new Map();
+    const pieces = board.state.pieces;
+
+    for (const [square, piece] of pieces) {
+        if (piece) {
+            // In free analysis mode, allow moving any piece
+            const possibleDests = calculatePossibleSquares(square);
+            dests.set(square, possibleDests);
+        }
+    }
+
+    board.set({
+        movable: {
+            color: 'both',
+            free: false,
+            dests: dests
+        }
+    });
+}
+
+function calculatePossibleSquares(from) {
+    // For free analysis, return all squares
+    // In a real implementation, this would calculate legal moves
+    const squares = [];
+    const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+    const ranks = ['1', '2', '3', '4', '5', '6', '7', '8'];
+
+    files.forEach(file => {
+        ranks.forEach(rank => {
+            const square = file + rank;
+            if (square !== from) {
+                squares.push(square);
+            }
+        });
+    });
+
+    return squares;
+}
+
+// Navigation functions
+function goToStart() {
+    if (moveHistory.length === 0) return;
+
+    currentMoveIndex = -1;
+    currentFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
+    board.set({
+        fen: currentFen,
+        lastMove: null
+    });
+
+    updateUI();
+
+    if (analysisEnabled) {
+        requestEngineAnalysis();
+    }
+}
+
+function goToPrevious() {
+    if (currentMoveIndex > 0) {
+        currentMoveIndex--;
+        const move = moveHistory[currentMoveIndex];
+        currentFen = move.fen;
+
         board.set({
             fen: currentFen,
-            lastMove: null
+            lastMove: [move.from, move.to]
         });
 
         updateUI();
@@ -274,70 +685,20 @@ function resetBoard() {
         if (analysisEnabled) {
             requestEngineAnalysis();
         }
-    }
-}
-
-function flipBoard() {
-    if (board) {
-        board.toggleOrientation();
-    }
-}
-
-function toggleAnalysis() {
-    analysisEnabled = !analysisEnabled;
-    const button = document.getElementById('analysisToggle');
-
-    if (button) {
-        button.innerHTML = `<i class="fas fa-brain"></i> Analysis: ${analysisEnabled ? 'ON' : 'OFF'}`;
-        button.className = analysisEnabled ? 'btn-chess' : 'btn-chess btn-secondary';
-    }
-
-    if (analysisEnabled) {
-        requestEngineAnalysis();
     } else {
-        clearEngineAnalysis();
+        goToStart();
     }
 }
 
-// Move navigation
-function goToPreviousMove() {
-    if (currentMoveIndex > -1) {
-        currentMoveIndex--;
-
-        if (currentMoveIndex === -1) {
-            currentFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-            board.set({
-                fen: currentFen,
-                lastMove: null
-            });
-        } else {
-            const moveData = moveHistory[currentMoveIndex];
-            currentFen = moveData.fen;
-            board.set({
-                fen: currentFen,
-                lastMove: [moveData.from, moveData.to]
-            });
-        }
-
-        updateUI();
-
-        if (analysisEnabled) {
-            requestEngineAnalysis();
-        }
-    }
-}
-
-function goToNextMove() {
+function goToNext() {
     if (currentMoveIndex < moveHistory.length - 1) {
         currentMoveIndex++;
-        const moveData = moveHistory[currentMoveIndex];
-
-        // TODO: Apply the move properly to get the resulting FEN
-        currentFen = moveData.fen;
+        const move = moveHistory[currentMoveIndex];
+        currentFen = move.fen;
 
         board.set({
             fen: currentFen,
-            lastMove: [moveData.from, moveData.to]
+            lastMove: [move.from, move.to]
         });
 
         updateUI();
@@ -351,12 +712,12 @@ function goToNextMove() {
 function goToEnd() {
     if (moveHistory.length > 0) {
         currentMoveIndex = moveHistory.length - 1;
-        const moveData = moveHistory[currentMoveIndex];
-        currentFen = moveData.fen;
+        const move = moveHistory[currentMoveIndex];
+        currentFen = move.fen;
 
         board.set({
             fen: currentFen,
-            lastMove: [moveData.from, moveData.to]
+            lastMove: [move.from, move.to]
         });
 
         updateUI();
@@ -370,12 +731,12 @@ function goToEnd() {
 function goToMove(index) {
     if (index >= 0 && index < moveHistory.length) {
         currentMoveIndex = index;
-        const moveData = moveHistory[index];
-        currentFen = moveData.fen;
+        const move = moveHistory[index];
+        currentFen = move.fen;
 
         board.set({
             fen: currentFen,
-            lastMove: [moveData.from, moveData.to]
+            lastMove: [move.from, move.to]
         });
 
         updateUI();
@@ -386,7 +747,42 @@ function goToMove(index) {
     }
 }
 
-// FEN operations
+// Keyboard shortcuts
+function handleKeyboardShortcuts(e) {
+    // Arrow keys for navigation
+    switch (e.key) {
+        case 'ArrowLeft':
+            e.preventDefault();
+            goToPrevious();
+            break;
+        case 'ArrowRight':
+            e.preventDefault();
+            goToNext();
+            break;
+        case 'ArrowUp':
+            e.preventDefault();
+            goToStart();
+            break;
+        case 'ArrowDown':
+            e.preventDefault();
+            goToEnd();
+            break;
+        case 'f':
+            if (!e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                flipBoard();
+            }
+            break;
+        case 'a':
+            if (!e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                toggleAnalysis();
+            }
+            break;
+    }
+}
+
+// FEN handling
 function copyFEN() {
     navigator.clipboard.writeText(currentFen).then(() => {
         showNotification('FEN copied to clipboard!', 'success');
@@ -436,219 +832,36 @@ function isValidFEN(fen) {
     return parts.length === 6;
 }
 
-// Engine simulation
-function simulateEngineConnection() {
-    engineConnected = true;
-    updateEngineStatus('connected', 'Connected');
-
-    if (analysisEnabled) {
-        requestEngineAnalysis();
-    }
-}
-
-function updateEngineStatus(status, text) {
-    const statusIndicator = document.getElementById('engineStatus');
-    const statusText = document.getElementById('engineStatusText');
-
-    if (statusIndicator) {
-        statusIndicator.className = `status-indicator status-${status}`;
-    }
-
-    if (statusText) {
-        statusText.textContent = text;
-    }
-}
-
-function requestEngineAnalysis() {
-    if (!engineConnected) return;
-
-    updateEngineStatus('analyzing', 'Analyzing...');
-
-    // Simulate engine analysis
-    setTimeout(() => {
-        const mockAnalysis = generateMockAnalysis();
-        updateEngineAnalysis(mockAnalysis);
-        updateEngineStatus('connected', 'Connected');
-    }, 500 + Math.random() * 1000);
-}
-
-function generateMockAnalysis() {
-    const evaluations = ['+0.15', '-0.23', '+0.45', '-0.12', '+0.67', '=0.00', '+1.23', '-0.89'];
-    const moves = ['e4', 'Nf3', 'd4', 'Bc4', 'O-O', 'Qd2', 'Rfe1', 'a3'];
-    const depths = [12, 15, 18, 20, 22];
-    const pvLines = [
-        'e4 e5 Nf3 Nc6 Bc4',
-        'Nf3 d5 d4 Nf6 c4',
-        'd4 d5 c4 e6 Nc3',
-        'O-O Nf6 Re1 e6 c3'
-    ];
-
-    return {
-        evaluation: evaluations[Math.floor(Math.random() * evaluations.length)],
-        bestMove: moves[Math.floor(Math.random() * moves.length)],
-        depth: depths[Math.floor(Math.random() * depths.length)],
-        pvLine: pvLines[Math.floor(Math.random() * pvLines.length)]
-    };
-}
-
-function updateEngineAnalysis(analysis) {
-    const evaluationElement = document.getElementById('evaluation');
-    const bestMoveElement = document.getElementById('best-move');
-    const depthElement = document.getElementById('depth');
-    const pvLineElement = document.getElementById('pv-line');
-    const evalBarElement = document.getElementById('evalBar');
-
-    if (evaluationElement) {
-        evaluationElement.textContent = analysis.evaluation;
-
-        // Update evaluation badge color
-        const evalValue = parseFloat(analysis.evaluation.replace(/[+=]/g, ''));
-        if (evalValue > 0.5) {
-            evaluationElement.className = 'badge bg-success';
-        } else if (evalValue < -0.5) {
-            evaluationElement.className = 'badge bg-danger';
-        } else {
-            evaluationElement.className = 'badge bg-secondary';
-        }
-    }
-
-    if (bestMoveElement) {
-        bestMoveElement.textContent = analysis.bestMove;
-    }
-
-    if (depthElement) {
-        depthElement.textContent = analysis.depth;
-    }
-
-    if (pvLineElement) {
-        pvLineElement.textContent = analysis.pvLine;
-    }
-
-    if (evalBarElement) {
-        // Convert evaluation to bar position (0-100%)
-        const evalValue = parseFloat(analysis.evaluation.replace(/[+=]/g, ''));
-        const isPositive = analysis.evaluation.includes('+');
-        let barPosition = 50; // Center position
-
-        if (isPositive) {
-            barPosition = Math.min(90, 50 + (evalValue * 20));
-        } else {
-            barPosition = Math.max(10, 50 - (evalValue * 20));
-        }
-
-        evalBarElement.style.left = barPosition + '%';
-    }
-}
-
-function clearEngineAnalysis() {
-    const elements = {
-        'evaluation': '+0.00',
-        'best-move': '--',
-        'depth': '--',
-        'pv-line': '--'
-    };
-
-    Object.entries(elements).forEach(([id, defaultValue]) => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.textContent = defaultValue;
-        }
-    });
-
-    const evalBarElement = document.getElementById('evalBar');
-    if (evalBarElement) {
-        evalBarElement.style.left = '50%';
-    }
-
-    const evaluationElement = document.getElementById('evaluation');
-    if (evaluationElement) {
-        evaluationElement.className = 'badge bg-secondary';
-    }
-}
-
 // Utility functions
 function showNotification(message, type = 'info') {
-    // Create a simple notification
-    const notification = document.createElement('div');
-    notification.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
-    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-    notification.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
+    console.log(`[${type.toUpperCase()}] ${message}`);
 
-    document.body.appendChild(notification);
+    // You can implement a proper notification system here
+    // For now, just log to console
 
-    // Auto-remove after 3 seconds
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.remove();
-        }
-    }, 3000);
-}
+    // Example: Show a Bootstrap toast or alert
+    if (typeof bootstrap !== 'undefined') {
+        // Create and show a toast notification
+        const toastHtml = `
+            <div class="toast align-items-center text-white bg-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'primary'} border-0" role="alert">
+                <div class="d-flex">
+                    <div class="toast-body">${message}</div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            </div>
+        `;
 
-function handleKeyboardShortcuts(event) {
-    // Only trigger if not typing in an input
-    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
-        return;
-    }
+        const toastContainer = document.createElement('div');
+        toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+        toastContainer.innerHTML = toastHtml;
+        document.body.appendChild(toastContainer);
 
-    switch (event.key.toLowerCase()) {
-        case 'r':
-            if (event.ctrlKey) {
-                event.preventDefault();
-                resetBoard();
-            }
-            break;
-        case 'f':
-            if (event.ctrlKey) {
-                event.preventDefault();
-                flipBoard();
-            }
-            break;
-        case 'arrowleft':
-            event.preventDefault();
-            goToPreviousMove();
-            break;
-        case 'arrowright':
-            event.preventDefault();
-            goToNextMove();
-            break;
-        case 'arrowup':
-            event.preventDefault();
-            // Go to start
-            currentMoveIndex = -1;
-            currentFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-            board.set({
-                fen: currentFen,
-                lastMove: null
-            });
-            updateUI();
-            break;
-        case 'arrowdown':
-            event.preventDefault();
-            goToEnd();
-            break;
-        case 'a':
-            if (event.ctrlKey) {
-                event.preventDefault();
-                toggleAnalysis();
-            }
-            break;
-        case 'c':
-            if (event.ctrlKey) {
-                event.preventDefault();
-                copyFEN();
-            }
-            break;
-        case 'v':
-            if (event.ctrlKey) {
-                event.preventDefault();
-                pasteFEN();
-            }
-            break;
+        const toast = new bootstrap.Toast(toastContainer.querySelector('.toast'));
+        toast.show();
+
+        // Remove container after toast hides
+        toastContainer.querySelector('.toast').addEventListener('hidden.bs.toast', () => {
+            toastContainer.remove();
+        });
     }
 }
-
-// Initialize everything when the script loads
-console.log('Chess Study System initialized - Local Chessground 9.2.3');
