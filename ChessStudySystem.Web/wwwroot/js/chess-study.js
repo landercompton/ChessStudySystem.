@@ -370,66 +370,125 @@ function updateEngineStatus(status, text) {
     }
 }
 
+
+// Replace your updateEngineAnalysis function with this improved version
+function updateEngineAnalysis(info) {
+    const evalElement = document.getElementById('evaluation');
+    const bestMoveElement = document.getElementById('best-move');
+    const depthElement = document.getElementById('depth');
+    const pvElement = document.getElementById('pv-line');
+
+    // Determine whose turn it is from the current FEN
+    const isWhiteToMove = currentFen.includes(' w ');
+
+    if (evalElement && info.score !== undefined) {
+        let evalText = '';
+        let displayScore = info.score;
+
+        if (typeof info.score === 'string' && info.score.startsWith('M')) {
+            evalText = info.score; // Mate in X
+        } else {
+            // Engine always evaluates from White's perspective
+            // If it's Black's turn, we need to show the evaluation correctly
+            evalText = displayScore > 0 ? `+${displayScore.toFixed(2)}` : displayScore.toFixed(2);
+        }
+
+        evalElement.textContent = evalText;
+
+        // Update evaluation badge color based on the score
+        const evalValue = typeof displayScore === 'number' ? displayScore : 0;
+        if (evalValue > 0.5) {
+            evalElement.className = 'badge bg-success';
+        } else if (evalValue < -0.5) {
+            evalElement.className = 'badge bg-danger';
+        } else {
+            evalElement.className = 'badge bg-secondary';
+        }
+
+        // Update evaluation bar
+        updateEvaluationBar(displayScore);
+    }
+
+    if (bestMoveElement && info.bestMove) {
+        // Convert UCI notation to a more readable format if needed
+        const bestMove = info.bestMove || '--';
+        bestMoveElement.textContent = bestMove;
+
+        // Highlight the best move on the board
+        highlightBestMove(bestMove);
+    }
+
+    if (depthElement && info.depth) {
+        depthElement.textContent = info.depth;
+    }
+
+    if (pvElement && info.pv) {
+        const moves = info.pv.split(' ').slice(0, 6).join(' ');
+        pvElement.textContent = moves;
+    }
+
+    console.log(`🎯 Analysis updated for ${isWhiteToMove ? 'White' : 'Black'} to move:`, {
+        evaluation: evalText,
+        bestMove: info.bestMove,
+        depth: info.depth
+    });
+}
+
+// Also update your requestEngineAnalysis function to ensure proper analysis
 async function requestEngineAnalysis() {
-    if (!engineConnected || !currentEngine) return;
+    if (!engineConnected || !currentEngine) {
+        console.log('❌ Engine not connected or available');
+        return;
+    }
+
+    const isWhiteToMove = currentFen.includes(' w ');
+    console.log(`🔄 Requesting analysis for ${isWhiteToMove ? 'White' : 'Black'} to move`);
+    console.log('📋 Current FEN:', currentFen);
 
     updateEngineStatus('analyzing', 'Analyzing...');
 
     try {
+        // Clear previous best move highlight
+        board.setAutoShapes([]);
+
         // Set the current position
         await currentEngine.setPosition(currentFen);
 
-        // Start analysis
+        // Start analysis with longer time for better accuracy
         const analysis = await currentEngine.analyze({
             depth: 20,
-            moveTime: 1000 // Analyze for 1 second
+            moveTime: 2000 // Analyze for 2 seconds for better results
         });
 
         updateEngineStatus('connected', 'Connected');
 
-        // Update UI with best move if found
-        if (analysis.bestMove) {
-            highlightBestMove(analysis.bestMove);
-        }
+        console.log('✅ Analysis completed:', analysis);
+
     } catch (error) {
-        console.error('Analysis error:', error);
+        console.error('❌ Analysis error:', error);
         updateEngineStatus('connected', 'Connected');
     }
 }
 
-function updateEngineAnalysis(info) {
-    const evalElement = document.getElementById('engineEvaluation');
-    const depthElement = document.getElementById('engineDepth');
-    const pvElement = document.getElementById('enginePV');
-
-    if (evalElement && info.score !== undefined) {
-        let evalText = '';
-        if (typeof info.score === 'string' && info.score.startsWith('M')) {
-            evalText = info.score; // Mate in X
-        } else {
-            evalText = info.score > 0 ? `+${info.score.toFixed(2)}` : info.score.toFixed(2);
-        }
-        evalElement.textContent = evalText;
-
-        // Update evaluation bar
-        updateEvaluationBar(info.score);
-    }
-
-    if (depthElement && info.depth) {
-        depthElement.textContent = `Depth: ${info.depth}`;
-    }
-
-    if (pvElement && info.pv) {
-        const moves = info.pv.split(' ').slice(0, 5).join(' ');
-        pvElement.textContent = `Line: ${moves}`;
-    }
-}
-
+// Update the highlightBestMove function to handle UCI notation properly
 function highlightBestMove(move) {
-    if (!board || move.length < 4) return;
+    if (!board || !move || move.length < 4 || move === '--') {
+        // Clear highlights if no valid move
+        board.setAutoShapes([]);
+        return;
+    }
 
     const from = move.substring(0, 2);
     const to = move.substring(2, 4);
+
+    // Validate square names
+    const validSquare = /^[a-h][1-8]$/.test(from) && /^[a-h][1-8]$/.test(to);
+    if (!validSquare) {
+        console.warn('Invalid move format:', move);
+        return;
+    }
+
+    console.log(`💡 Highlighting best move: ${from} → ${to}`);
 
     board.setAutoShapes([
         {
@@ -439,6 +498,39 @@ function highlightBestMove(move) {
         }
     ]);
 }
+
+// Add this function to clear analysis display when needed
+function clearEngineAnalysis() {
+    const elements = {
+        'evaluation': '+0.00',
+        'best-move': '--',
+        'depth': '--',
+        'pv-line': '--'
+    };
+
+    Object.entries(elements).forEach(([id, defaultValue]) => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.textContent = defaultValue;
+        }
+    });
+
+    const evalBarElement = document.getElementById('evalBar');
+    if (evalBarElement) {
+        evalBarElement.style.left = '50%';
+    }
+
+    const evaluationElement = document.getElementById('evaluation');
+    if (evaluationElement) {
+        evaluationElement.className = 'badge bg-secondary';
+    }
+
+    // Clear best move highlights
+    if (board) {
+        board.setAutoShapes([]);
+    }
+}
+
 
 function updateEvaluationBar(score) {
     const indicator = document.querySelector('.evaluation-indicator');
@@ -459,7 +551,39 @@ function updateEvaluationBar(score) {
     indicator.style.left = `${percentage}%`;
 }
 
-async function onMoveComplete(orig, dest, metadata) {
+//async function onMoveComplete(orig, dest, metadata) {
+//    console.log('Move made:', orig, dest);
+
+//    const move = orig + dest;
+
+//    // Add move to history
+//    const newMove = {
+//        move: move,
+//        from: orig,
+//        to: dest,
+//        san: move, // TODO: Convert to SAN notation
+//        fen: currentFen,
+//        timestamp: new Date()
+//    };
+
+//    // If we're not at the end of history, truncate future moves
+//    if (currentMoveIndex < moveHistory.length - 1) {
+//        moveHistory = moveHistory.slice(0, currentMoveIndex + 1);
+//    }
+
+//    moveHistory.push(newMove);
+//    currentMoveIndex = moveHistory.length - 1;
+
+//    // Update UI
+//    updateUI();
+
+//    // Trigger engine analysis if enabled
+//    if (analysisEnabled && engineConnected) {
+//        requestEngineAnalysis();
+//    }
+//}
+
+function onMoveComplete(orig, dest, metadata) {
     console.log('Move made:', orig, dest);
 
     const move = orig + dest;
@@ -482,13 +606,34 @@ async function onMoveComplete(orig, dest, metadata) {
     moveHistory.push(newMove);
     currentMoveIndex = moveHistory.length - 1;
 
-    // Update UI
-    updateUI();
+    // Update the current FEN to the board's current position
+    // This is crucial - get the FEN from the board after the move
+    currentFen = board.getFen();
 
-    // Trigger engine analysis if enabled
-    if (analysisEnabled && engineConnected) {
-        requestEngineAnalysis();
-    }
+    // Send move to server for validation (if implemented)
+    validateMoveOnServer(move).then(data => {
+        if (data && data.success) {
+            // If server validation is successful, use the server's FEN
+            currentFen = data.fen;
+        }
+
+        updateUI();
+
+        if (analysisEnabled) {
+            console.log('Requesting engine analysis after move...');
+            requestEngineAnalysis();
+        }
+    }).catch(error => {
+        console.log('Server validation not implemented, continuing with client-side');
+        // FEN is already updated above from board.getFen()
+
+        updateUI();
+
+        if (analysisEnabled) {
+            console.log('Requesting engine analysis after move (client-side)...');
+            requestEngineAnalysis();
+        }
+    });
 }
 
 async function validateMoveOnServer(move) {

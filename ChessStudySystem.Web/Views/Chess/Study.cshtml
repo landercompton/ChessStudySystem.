@@ -40,31 +40,39 @@
                 </div>
             </div>
 
-            <!-- Engine Analysis Section -->
+         
             <div class="control-section">
-                <h5><i class="fas fa-microchip"></i> Engine Analysis</h5>
-                <div class="d-flex align-items-center mb-3">
-                    <span class="status-indicator status-disconnected" id="engineStatus"></span>
-                    <span id="engineStatusText" class="me-3">Disconnected</span>
-                    <select class="form-select form-select-sm w-auto" id="engineSelect" onchange="handleEngineChange(this.value)">
-                        <option value="lichess-stockfish" selected>Lichess Stockfish</option>
-                        <option value="stockfish-nnue" disabled>Stockfish NNUE (Coming Soon)</option>
-                    </select>
-                </div>
-
-                <div class="evaluation-display">
-                    <div class="d-flex justify-content-between mb-2">
-                        <span class="fw-bold">Evaluation:</span>
-                        <span id="engineEvaluation" class="font-monospace">-</span>
+                <h5><i class="fas fa-robot"></i> Engine Analysis</h5>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span><strong>Evaluation:</strong></span>
+                        <span id="evaluation" class="badge bg-secondary">+0.00</span>
                     </div>
                     <div class="evaluation-bar">
-                        <div class="evaluation-indicator"></div>
+                        <div class="evaluation-indicator" id="evalBar"></div>
                     </div>
-                    <div class="small text-muted">
-                        <span id="engineDepth">Depth: -</span>
-                        <br>
-                        <span id="enginePV" class="font-monospace" style="font-size: 0.85em;">Line: -</span>
+                </div>
+
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <strong>Best Move:</strong>
+                        <div id="best-move" class="text-primary">--</div>
                     </div>
+                    <div class="col-6">
+                        <strong>Depth:</strong>
+                        <div id="depth" class="text-info">--</div>
+                    </div>
+                </div>
+
+                <div class="mb-2">
+                    <strong>Engine Status:</strong>
+                    <span class="status-indicator status-disconnected" id="engineStatus"></span>
+                    <span id="engineStatusText">Disconnected</span>
+                </div>
+
+                <div class="mb-2">
+                    <strong>Principal Variation:</strong>
+                    <div id="pv-line" class="small text-muted">--</div>
                 </div>
             </div>
 
