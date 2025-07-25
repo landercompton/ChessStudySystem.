@@ -130,6 +130,11 @@ class ChessEngineManager {
 
             console.log('🔍 Stockfish instance type:', typeof stockfish);
             console.log('🔍 Stockfish instance:', stockfish);
+            console.log('🔍 Stockfish instance methods:', Object.getOwnPropertyNames(stockfish));
+            console.log('🔍 Stockfish instance prototype:', stockfish.__proto__);
+
+            // FIXED: Declare engine variable outside the if/else blocks
+            let engine;
 
             // Create engine wrapper if StockfishWrapper is available
             if (window.StockfishWrapper) {
@@ -137,11 +142,11 @@ class ChessEngineManager {
                 await wrapper.initialize(stockfish);
 
                 // Create engine interface
-                const engine = new LichessStockfishEngine(wrapper);
+                engine = new LichessStockfishEngine(wrapper);
             } else {
                 // Fallback to direct usage
                 console.warn('StockfishWrapper not found, using direct interface');
-                const engine = new LichessStockfishEngine(stockfish);
+                engine = new LichessStockfishEngine(stockfish);
             }
 
             // Initialize the engine
@@ -211,194 +216,96 @@ class LichessStockfishEngine {
         }
     }
 
-    setupListenAPI() {
-        // For modern Stockfish with listen API
-        this.stockfish.listen((message) => {
-            this.handleMessage(message);
-        });
-
-        // Create a custom postMessage method for sending commands
-        this.postMessage = (command) => {
-            // Some Stockfish builds might still have postMessage even with listen
-            if (this.stockfish.postMessage) {
-                this.stockfish.postMessage(command);
-            } else if (this.stockfish.send) {
-                this.stockfish.send(command);
-            } else {
-                // Try calling the stockfish instance directly
-                this.stockfish(command);
-            }
-        };
-    }
-
-    setupMessageListenerAPI() {
-        // For Stockfish with addMessageListener
-        this.stockfish.addMessageListener((message) => {
-            this.handleMessage(message);
-        });
-
-        this.postMessage = (command) => {
-            this.stockfish.postMessage(command);
-        };
-    }
-
-    setupPostMessageAPI() {
-        // For traditional Stockfish with Worker-like API
-        this.stockfish.onmessage = (event) => {
-            this.handleMessage(event.data);
-        };
-
-        this.postMessage = (command) => {
-            this.stockfish.postMessage(command);
-        };
-    }
-
-    setupCmdAPI() {
-        // For Stockfish with cmd API
-        if (this.stockfish.addMessageListener) {
-            this.stockfish.addMessageListener((message) => {
-                this.handleMessage(message);
-            });
-        }
-
-        this.postMessage = (command) => {
-            this.stockfish.cmd(command);
-        };
-    }
-
-    setupCallableAPI() {
-        // For Stockfish that is directly callable
-        // Set up a message listener if available
-        if (this.stockfish.listen) {
-            this.stockfish.listen((message) => {
-                this.handleMessage(message);
-            });
-        } else if (this.stockfish.addMessageListener) {
-            this.stockfish.addMessageListener((message) => {
-                this.handleMessage(message);
-            });
-        }
-
-        // The stockfish instance itself is callable
-        this.postMessage = (command) => {
-            this.stockfish(command);
-        };
-    }
-
-    setupWorkerAPI() {
-        // For Web Worker-based Stockfish
-        this.stockfish.onmessage = (event) => {
-            this.handleMessage(event.data);
-        };
-
-        this.postMessage = (command) => {
-            this.stockfish.postMessage(command);
-        };
-    }
-
-    setupEventListenerAPI() {
-        // For Stockfish with addEventListener
-        this.stockfish.addEventListener('message', (event) => {
-            this.handleMessage(event.data);
-        });
-
-        this.postMessage = (command) => {
-            if (this.stockfish.postMessage) {
-                this.stockfish.postMessage(command);
-            } else if (typeof this.stockfish === 'function') {
-                this.stockfish(command);
-            }
-        };
-    }
-
     handleMessage(message) {
-        console.log('Engine:', message);
+        console.log('🔍 Engine message:', message);
 
-        // Handle UCI initialization
-        if (message === 'uciok') {
-            this.isReady = true;
-            this.resolveReady();
-        }
+        if (typeof message === 'string') {
+            const line = message.trim();
 
-        // Handle readyok
-        if (message === 'readyok') {
-            this.resolveIsReady();
-        }
-
-        // Handle best move
-        if (message.startsWith('bestmove')) {
-            const parts = message.split(' ');
-            const bestMove = parts[1];
-            const ponderMove = parts[3];
-
-            if (this.messageHandlers.has('bestmove')) {
-                this.messageHandlers.get('bestmove')({ bestMove, ponderMove });
+            if (line.startsWith('info')) {
+                this.parseInfo(line);
+                const infoHandler = this.messageHandlers.get('info');
+                if (infoHandler) infoHandler(this.currentEval);
+            } else if (line.startsWith('bestmove')) {
+                const bestmoveHandler = this.messageHandlers.get('bestmove');
+                if (bestmoveHandler) {
+                    const match = line.match(/bestmove (\S+)/);
+                    bestmoveHandler(match ? match[1] : null);
+                }
+            } else if (line === 'readyok') {
+                if (this.resolveIsReady) {
+                    this.resolveIsReady();
+                    this.resolveIsReady = null;
+                }
+            } else if (line === 'uciok') {
+                console.log('✅ UCI protocol confirmed');
             }
-        }
-
-        // Handle evaluation info
-        if (message.startsWith('info')) {
-            this.parseInfo(message);
         }
     }
 
-    parseInfo(message) {
-        const parts = message.split(' ');
-        const info = {};
+    parseInfo(line) {
+        // Basic info parsing
+        this.currentEval = {
+            depth: this.extractValue(line, 'depth'),
+            score: this.parseScore(line),
+            nodes: this.extractValue(line, 'nodes'),
+            nps: this.extractValue(line, 'nps'),
+            time: this.extractValue(line, 'time'),
+            pv: this.extractPV(line)
+        };
+    }
 
-        for (let i = 1; i < parts.length; i++) {
-            switch (parts[i]) {
-                case 'depth':
-                    info.depth = parseInt(parts[++i]);
-                    break;
-                case 'score':
-                    if (parts[i + 1] === 'cp') {
-                        info.score = parseInt(parts[i + 2]) / 100;
-                        i += 2;
-                    } else if (parts[i + 1] === 'mate') {
-                        info.score = `M${parts[i + 2]}`;
-                        i += 2;
-                    }
-                    break;
-                case 'nodes':
-                    info.nodes = parseInt(parts[++i]);
-                    break;
-                case 'nps':
-                    info.nps = parseInt(parts[++i]);
-                    break;
-                case 'time':
-                    info.time = parseInt(parts[++i]);
-                    break;
-                case 'pv':
-                    info.pv = parts.slice(i + 1).join(' ');
-                    i = parts.length;
-                    break;
-            }
+    extractValue(line, key) {
+        const regex = new RegExp(`${key}\\s+(\\d+)`);
+        const match = line.match(regex);
+        return match ? parseInt(match[1]) : null;
+    }
+
+    parseScore(line) {
+        if (line.includes('score cp')) {
+            const match = line.match(/score cp (-?\d+)/);
+            return match ? { type: 'centipawn', value: parseInt(match[1]) } : null;
+        } else if (line.includes('score mate')) {
+            const match = line.match(/score mate (-?\d+)/);
+            return match ? { type: 'mate', value: parseInt(match[1]) } : null;
         }
+        return null;
+    }
 
-        this.currentEval = info;
-
-        if (this.messageHandlers.has('info')) {
-            this.messageHandlers.get('info')(info);
-        }
+    extractPV(line) {
+        const match = line.match(/pv\s+(.+)/);
+        return match ? match[1].split(' ') : [];
     }
 
     async sendCommand(command) {
-        console.log('→', command);
-        this.wrapper.send(command);
+        console.log('→ Sending command:', command);
+        if (this.wrapper && this.wrapper.send) {
+            this.wrapper.send(command);
+        } else {
+            console.error('❌ No send method available');
+        }
+
+        // Add a small delay to ensure command is processed
+        return new Promise(resolve => {
+            setTimeout(resolve, 50);
+        });
     }
 
-    async waitForReady() {
-        if (this.isReady) return;
-
+    async uci() {
+        await this.sendCommand('uci');
         return new Promise((resolve) => {
-            this.resolveReady = resolve;
-            setTimeout(() => {
-                if (!this.isReady) {
-                    console.warn('⚠️ Engine ready timeout, continuing anyway');
-                    this.isReady = true;
+            const handler = (message) => {
+                if (message === 'uciok') {
+                    this.messageHandlers.delete('uciok');
                     resolve();
                 }
+            };
+            this.messageHandlers.set('uciok', handler);
+
+            // Timeout after 5 seconds
+            setTimeout(() => {
+                this.messageHandlers.delete('uciok');
+                resolve();
             }, 5000);
         });
     }
@@ -467,8 +374,8 @@ class LichessStockfishEngine {
     }
 
     destroy() {
-        if (this.stockfish.terminate) {
-            this.stockfish.terminate();
+        if (this.wrapper && this.wrapper.instance && this.wrapper.instance.terminate) {
+            this.wrapper.instance.terminate();
         }
         this.messageHandlers.clear();
     }

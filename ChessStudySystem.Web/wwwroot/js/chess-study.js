@@ -1,5 +1,4 @@
-﻿// No changes needed to loadChessEngines - keep it simple
-// The chess-engines.js and stockfish-wrapper.js will handle all the complexity// Chess Study JavaScript with Fixed Engine Integration
+﻿// Chess Study JavaScript with Fixed Engine Integration
 let board;
 let currentFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 let moveHistory = [];
@@ -102,247 +101,87 @@ function initializeUI() {
     }
 }
 
-// Engine connection and management
+// FIXED: Use the existing ChessEngineManager
 async function connectToEngine() {
     try {
-        // Create inline engine manager if needed
-        if (!window.simpleEngineManager) {
-            console.log('Creating inline engine manager...');
+        console.log('🔗 Connecting to chess engine...');
+        updateEngineStatus('connecting', 'Connecting...');
 
-            // Create the engine classes inline
-            window.LichessStockfishEngine = class {
-                constructor() {
-                    this.instance = null;
-                    this.isReady = false;
-                    this.messageHandlers = new Map();
-                    this.currentEval = null;
-                }
-
-                async initialize() {
-                    console.log('🔄 Initializing Lichess Stockfish...');
-
-                    try {
-                        // Import the module
-                        const module = await import('/js/stockfish/sf171-79.js');
-                        console.log('✅ Module loaded');
-
-                        // The module.default is a function that returns a promise
-                        this.instance = await module.default();
-                        console.log('✅ Stockfish instance created');
-
-                        // Set up the listen handler
-                        if (this.instance.listen) {
-                            this.instance.listen = (message) => {
-                                this.handleMessage(message);
-                            };
-                            console.log('✅ Listen handler configured');
-                        }
-
-                        // Send initial UCI command
-                        this.sendCommand('uci');
-
-                        // Wait for initialization
-                        await this.waitForReady();
-
-                        console.log('✅ Lichess Stockfish initialized successfully');
-
-                    } catch (error) {
-                        console.error('❌ Failed to initialize Lichess Stockfish:', error);
-                        throw error;
-                    }
-                }
-
-                handleMessage(message) {
-                    console.log('Engine:', message);
-
-                    // Handle UCI initialization
-                    if (message === 'uciok') {
-                        this.isReady = true;
-                        if (this.readyResolver) {
-                            this.readyResolver();
-                            this.readyResolver = null;
-                        }
-                    }
-
-                    // Handle readyok
-                    if (message === 'readyok') {
-                        if (this.isReadyResolver) {
-                            this.isReadyResolver();
-                            this.isReadyResolver = null;
-                        }
-                    }
-
-                    // Handle best move
-                    if (message.startsWith('bestmove')) {
-                        const parts = message.split(' ');
-                        const bestMove = parts[1];
-                        const ponderMove = parts[3];
-
-                        if (this.messageHandlers.has('bestmove')) {
-                            this.messageHandlers.get('bestmove')({ bestMove, ponderMove });
-                        }
-                    }
-
-                    // Handle evaluation info
-                    if (message.startsWith('info')) {
-                        this.parseInfo(message);
-                    }
-                }
-
-                parseInfo(message) {
-                    const parts = message.split(' ');
-                    const info = {};
-
-                    for (let i = 1; i < parts.length; i++) {
-                        switch (parts[i]) {
-                            case 'depth':
-                                info.depth = parseInt(parts[++i]);
-                                break;
-                            case 'score':
-                                if (parts[i + 1] === 'cp') {
-                                    info.score = parseInt(parts[i + 2]) / 100;
-                                    i += 2;
-                                } else if (parts[i + 1] === 'mate') {
-                                    info.score = `M${parts[i + 2]}`;
-                                    i += 2;
-                                }
-                                break;
-                            case 'nodes':
-                                info.nodes = parseInt(parts[++i]);
-                                break;
-                            case 'nps':
-                                info.nps = parseInt(parts[++i]);
-                                break;
-                            case 'time':
-                                info.time = parseInt(parts[++i]);
-                                break;
-                            case 'pv':
-                                info.pv = parts.slice(i + 1).join(' ');
-                                i = parts.length;
-                                break;
-                        }
-                    }
-
-                    this.currentEval = info;
-
-                    if (this.messageHandlers.has('info')) {
-                        this.messageHandlers.get('info')(info);
-                    }
-                }
-
-                sendCommand(command) {
-                    console.log('→', command);
-                    if (this.instance && this.instance.uci) {
-                        this.instance.uci(command);
-                    } else {
-                        console.error('Cannot send command - uci method not available');
-                    }
-                }
-
-                async waitForReady() {
-                    if (this.isReady) return;
-
-                    return new Promise((resolve) => {
-                        this.readyResolver = resolve;
-                        // Timeout after 5 seconds
-                        setTimeout(() => {
-                            if (!this.isReady) {
-                                console.warn('⚠️ Engine ready timeout, continuing anyway');
-                                this.isReady = true;
-                                resolve();
-                            }
-                        }, 5000);
-                    });
-                }
-
-                async setPosition(fen = 'startpos', moves = []) {
-                    let command = 'position ';
-                    if (fen === 'startpos') {
-                        command += 'startpos';
-                    } else {
-                        command += `fen ${fen}`;
-                    }
-
-                    if (moves.length > 0) {
-                        command += ' moves ' + moves.join(' ');
-                    }
-
-                    this.sendCommand(command);
-                }
-
-                async analyze(options = {}) {
-                    const {
-                        depth = 20,
-                        nodes = null,
-                        moveTime = null,
-                        infinite = false
-                    } = options;
-
-                    let command = 'go';
-
-                    if (infinite) {
-                        command += ' infinite';
-                    } else {
-                        if (depth) command += ` depth ${depth}`;
-                        if (nodes) command += ` nodes ${nodes}`;
-                        if (moveTime) command += ` movetime ${moveTime}`;
-                    }
-
-                    this.sendCommand(command);
-
-                    return new Promise((resolve) => {
-                        this.messageHandlers.set('bestmove', (result) => {
-                            this.messageHandlers.delete('bestmove');
-                            resolve(result);
-                        });
-                    });
-                }
-
-                async stop() {
-                    this.sendCommand('stop');
-                }
-
-                onInfo(callback) {
-                    this.messageHandlers.set('info', callback);
-                }
-            };
-
-            window.simpleEngineManager = {
-                async loadEngine() {
-                    console.log('🔄 Loading Lichess Stockfish...');
-
-                    try {
-                        this.engine = new window.LichessStockfishEngine();
-                        await this.engine.initialize();
-
-                        console.log('✅ Engine loaded successfully');
-                        return this.engine;
-                    } catch (error) {
-                        console.error('❌ Failed to load engine:', error);
-                        throw error;
-                    }
-                },
-                getEngine() {
-                    return this.engine;
-                }
-            };
+        // Use the existing ChessEngineManager
+        if (!window.chessEngineManager) {
+            throw new Error('ChessEngineManager not available');
         }
 
-        // Load the engine
-        currentEngine = await window.simpleEngineManager.loadEngine();
+        // Load the Lichess Stockfish engine
+        currentEngine = await window.chessEngineManager.loadEngine('lichess-stockfish');
 
-        // Set up engine info handler
-        currentEngine.onInfo((info) => {
-            updateEngineAnalysis(info);
-        });
+        // FIXED: Add debug info and multiple polling approaches
+        console.log('🔧 Setting up engine message handler...');
+
+        // Debug: Check what the engine object looks like
+        setTimeout(() => {
+            console.log('🔍 Engine debug:');
+            console.log('  - currentEngine:', currentEngine);
+            console.log('  - currentEngine.currentEval:', currentEngine.currentEval);
+            console.log('  - currentEngine.wrapper:', currentEngine.wrapper);
+            if (currentEngine.wrapper) {
+                console.log('  - wrapper.messageHandlers:', currentEngine.wrapper.messageHandlers);
+            }
+        }, 2000);
+
+        // Method 1: Poll for currentEval changes
+        let lastAnalysisTime = 0;
+        const checkForAnalysis = () => {
+            if (currentEngine && currentEngine.currentEval &&
+                currentEngine.currentEval.time &&
+                currentEngine.currentEval.time > lastAnalysisTime) {
+
+                console.log('🔍 Found new analysis data:', currentEngine.currentEval);
+                lastAnalysisTime = currentEngine.currentEval.time;
+                updateEngineAnalysis(currentEngine.currentEval);
+            }
+        };
+
+        // Poll every 100ms
+        setInterval(checkForAnalysis, 100);
+
+        // Method 2: Try to intercept wrapper messages
+        if (currentEngine.wrapper) {
+            currentEngine.wrapper.addMessageHandler((message) => {
+                console.log('🔍 Wrapper message received:', message);
+
+                // If it's an info message, parse it manually
+                if (typeof message === 'string' && message.startsWith('info')) {
+                    console.log('🔍 Manual parsing of info message');
+                    const parsedInfo = parseEngineInfo(message);
+                    if (parsedInfo.depth && parsedInfo.score !== undefined) {
+                        console.log('🔍 Manually parsed info:', parsedInfo);
+                        updateEngineAnalysis(parsedInfo);
+                    }
+                }
+            });
+        }
 
         engineConnected = true;
         updateEngineStatus('connected', 'Connected');
+        console.log('✅ Engine connected successfully');
 
-        // Start analysis if enabled
+        // TEMPORARY: Test the UI by manually calling updateEngineAnalysis
+        console.log('🧪 Testing UI update with fake data...');
+        setTimeout(() => {
+            updateEngineAnalysis({
+                depth: 15,
+                score: 0.25,
+                pv: ['g1f3', 'g8f6', 'e2e4'],
+                nodes: 50000
+            });
+        }, 1000);
+
+        // Start initial analysis if enabled
         if (analysisEnabled) {
-            requestEngineAnalysis();
+            setTimeout(() => requestEngineAnalysis(), 500);
         }
+
     } catch (error) {
         console.error('❌ Failed to connect to engine:', error);
         engineConnected = false;
@@ -351,90 +190,112 @@ async function connectToEngine() {
     }
 }
 
-// Engine selection handler
-async function handleEngineChange(engineType) {
-    // For now, we only support the inline Lichess Stockfish
-    await connectToEngine();
-}
+// FIXED: Manual engine info parser as backup
+function parseEngineInfo(message) {
+    const parts = message.split(' ');
+    const info = {};
 
-function updateEngineStatus(status, text) {
-    const statusIndicator = document.getElementById('engineStatus');
-    const statusText = document.getElementById('engineStatusText');
-
-    if (statusIndicator) {
-        statusIndicator.className = `status-indicator status-${status}`;
-    }
-
-    if (statusText) {
-        statusText.textContent = text;
-    }
-}
-
-
-// Replace your updateEngineAnalysis function with this improved version
-function updateEngineAnalysis(info) {
-    const evalElement = document.getElementById('evaluation');
-    const bestMoveElement = document.getElementById('best-move');
-    const depthElement = document.getElementById('depth');
-    const pvElement = document.getElementById('pv-line');
-
-    // Determine whose turn it is from the current FEN
-    const isWhiteToMove = currentFen.includes(' w ');
-
-    if (evalElement && info.score !== undefined) {
-        let evalText = '';
-        let displayScore = info.score;
-
-        if (typeof info.score === 'string' && info.score.startsWith('M')) {
-            evalText = info.score; // Mate in X
-        } else {
-            // Engine always evaluates from White's perspective
-            // If it's Black's turn, we need to show the evaluation correctly
-            evalText = displayScore > 0 ? `+${displayScore.toFixed(2)}` : displayScore.toFixed(2);
+    for (let i = 1; i < parts.length; i++) {
+        switch (parts[i]) {
+            case 'depth':
+                info.depth = parseInt(parts[++i]);
+                break;
+            case 'score':
+                if (parts[i + 1] === 'cp') {
+                    info.score = parseInt(parts[i + 2]) / 100; // Convert centipawns to pawns
+                    i += 2;
+                } else if (parts[i + 1] === 'mate') {
+                    info.score = `M${parts[i + 2]}`;
+                    i += 2;
+                }
+                break;
+            case 'nodes':
+                info.nodes = parseInt(parts[++i]);
+                break;
+            case 'nps':
+                info.nps = parseInt(parts[++i]);
+                break;
+            case 'time':
+                info.time = parseInt(parts[++i]);
+                break;
+            case 'pv':
+                info.pv = parts.slice(i + 1);
+                i = parts.length; // Skip to end
+                break;
         }
-
-        evalElement.textContent = evalText;
-
-        // Update evaluation badge color based on the score
-        const evalValue = typeof displayScore === 'number' ? displayScore : 0;
-        if (evalValue > 0.5) {
-            evalElement.className = 'badge bg-success';
-        } else if (evalValue < -0.5) {
-            evalElement.className = 'badge bg-danger';
-        } else {
-            evalElement.className = 'badge bg-secondary';
-        }
-
-        // Update evaluation bar
-        updateEvaluationBar(displayScore);
     }
 
-    if (bestMoveElement && info.bestMove) {
-        // Convert UCI notation to a more readable format if needed
-        const bestMove = info.bestMove || '--';
-        bestMoveElement.textContent = bestMove;
-
-        // Highlight the best move on the board
-        highlightBestMove(bestMove);
-    }
-
-    if (depthElement && info.depth) {
-        depthElement.textContent = info.depth;
-    }
-
-    if (pvElement && info.pv) {
-        const moves = info.pv.split(' ').slice(0, 6).join(' ');
-        pvElement.textContent = moves;
-    }
-
-    console.log(`🎯 Analysis updated for ${isWhiteToMove ? 'White' : 'Black'} to move:`, {
-        evaluation: evalText,
-        bestMove: info.bestMove,
-        depth: info.depth
-    });
+    return info;
 }
 
-// Also update your requestEngineAnalysis function to ensure proper analysis
+// Handle engine messages directly
+function handleEngineMessage(message) {
+    if (typeof message !== 'string') return;
+
+    const line = message.trim();
+    console.log('🔍 Processing engine message:', line);
+
+    // Handle info messages (analysis data)
+    if (line.startsWith('info') && line.includes('depth') && line.includes('score')) {
+        const info = parseInfoMessage(line);
+        console.log('📊 Parsed analysis info:', info);
+        updateEngineAnalysis(info);
+    }
+
+    // Handle bestmove
+    if (line.startsWith('bestmove')) {
+        const parts = line.split(' ');
+        const bestMove = parts[1];
+        console.log('🎯 Best move received:', bestMove);
+
+        // Update the best move display
+        const bestMoveElement = document.getElementById('best-move');
+        if (bestMoveElement && bestMove !== 'none') {
+            bestMoveElement.textContent = bestMove;
+            highlightBestMove(bestMove);
+        }
+    }
+}
+
+// FIXED: Parse UCI info messages properly
+function parseInfoMessage(message) {
+    const parts = message.split(' ');
+    const info = {};
+
+    for (let i = 1; i < parts.length; i++) {
+        switch (parts[i]) {
+            case 'depth':
+                info.depth = parseInt(parts[++i]);
+                break;
+            case 'score':
+                if (parts[i + 1] === 'cp') {
+                    info.score = parseInt(parts[i + 2]) / 100; // Convert centipawns to pawns
+                    i += 2;
+                } else if (parts[i + 1] === 'mate') {
+                    info.score = `M${parts[i + 2]}`;
+                    i += 2;
+                }
+                break;
+            case 'nodes':
+                info.nodes = parseInt(parts[++i]);
+                break;
+            case 'nps':
+                info.nps = parseInt(parts[++i]);
+                break;
+            case 'time':
+                info.time = parseInt(parts[++i]);
+                break;
+            case 'pv':
+                info.pv = parts.slice(i + 1);
+                i = parts.length; // Skip to end
+                break;
+        }
+    }
+
+    return info;
+}
+
+// FIXED: Proper engine analysis request
 async function requestEngineAnalysis() {
     if (!engineConnected || !currentEngine) {
         console.log('❌ Engine not connected or available');
@@ -451,23 +312,104 @@ async function requestEngineAnalysis() {
         // Clear previous best move highlight
         board.setAutoShapes([]);
 
-        // Set the current position
+        // Set the current position in the engine
         await currentEngine.setPosition(currentFen);
 
-        // Start analysis with longer time for better accuracy
-        const analysis = await currentEngine.analyze({
+        // Start analysis
+        currentEngine.analyze({
             depth: 20,
-            moveTime: 2000 // Analyze for 2 seconds for better results
+            moveTime: 2000 // Analyze for 2 seconds
         });
 
         updateEngineStatus('connected', 'Connected');
-
-        console.log('✅ Analysis completed:', analysis);
 
     } catch (error) {
         console.error('❌ Analysis error:', error);
         updateEngineStatus('connected', 'Connected');
     }
+}
+
+// Debug version of updateEngineAnalysis
+function updateEngineAnalysis(info) {
+    console.log('🎯 updateEngineAnalysis called with:', info);
+
+    const evalElement = document.getElementById('evaluation');
+    const bestMoveElement = document.getElementById('best-move');
+    const depthElement = document.getElementById('depth');
+    const pvElement = document.getElementById('pv-line');
+
+    console.log('🎯 DOM elements found:');
+    console.log('  - evalElement:', !!evalElement);
+    console.log('  - bestMoveElement:', !!bestMoveElement);
+    console.log('  - depthElement:', !!depthElement);
+    console.log('  - pvElement:', !!pvElement);
+
+    // Determine whose turn it is from the current FEN
+    const isWhiteToMove = currentFen.includes(' w ');
+    console.log('🎯 isWhiteToMove:', isWhiteToMove);
+
+    // Update evaluation
+    if (evalElement && info.score !== undefined && info.score !== null) {
+        console.log('🎯 Processing score:', info.score, typeof info.score);
+
+        let evalText = '';
+        let displayScore = info.score;
+
+        if (typeof info.score === 'string' && info.score.startsWith('M')) {
+            evalText = info.score;
+            displayScore = info.score.includes('-') ? -10 : 10;
+            console.log('🎯 String mate score processed:', evalText);
+        } else if (typeof info.score === 'number') {
+            displayScore = info.score;
+            evalText = displayScore > 0 ? `+${displayScore.toFixed(2)}` : displayScore.toFixed(2);
+            console.log('🎯 Number score processed:', evalText);
+        } else {
+            console.log('🎯 Unknown score format:', info.score);
+            evalText = String(info.score);
+            displayScore = 0;
+        }
+
+        console.log('🎯 Setting evaluation text:', evalText);
+        evalElement.textContent = evalText;
+
+        // Update evaluation badge color
+        const evalValue = typeof displayScore === 'number' ? displayScore : 0;
+        let badgeClass = 'badge bg-secondary';
+        if (evalValue > 0.5) {
+            badgeClass = 'badge bg-success';
+        } else if (evalValue < -0.5) {
+            badgeClass = 'badge bg-danger';
+        }
+
+        console.log('🎯 Setting badge class:', badgeClass);
+        evalElement.className = badgeClass;
+
+        // Update evaluation bar
+        updateEvaluationBar(displayScore);
+    }
+
+    // Update best move
+    if (bestMoveElement && info.pv && info.pv.length > 0) {
+        const bestMove = info.pv[0];
+        console.log('🎯 Setting best move:', bestMove);
+        bestMoveElement.textContent = bestMove;
+        highlightBestMove(bestMove);
+    }
+
+    // Update depth
+    if (depthElement && info.depth) {
+        console.log('🎯 Setting depth:', info.depth);
+        depthElement.textContent = info.depth;
+    }
+
+    // Update principal variation
+    if (pvElement && info.pv) {
+        const pvText = info.pv.slice(0, 6).join(' ');
+        console.log('🎯 Setting PV:', pvText);
+        pvElement.textContent = pvText;
+    }
+
+    console.log('🎯 Analysis update completed');
 }
 
 // Update the highlightBestMove function to handle UCI notation properly
@@ -499,39 +441,6 @@ function highlightBestMove(move) {
     ]);
 }
 
-// Add this function to clear analysis display when needed
-function clearEngineAnalysis() {
-    const elements = {
-        'evaluation': '+0.00',
-        'best-move': '--',
-        'depth': '--',
-        'pv-line': '--'
-    };
-
-    Object.entries(elements).forEach(([id, defaultValue]) => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.textContent = defaultValue;
-        }
-    });
-
-    const evalBarElement = document.getElementById('evalBar');
-    if (evalBarElement) {
-        evalBarElement.style.left = '50%';
-    }
-
-    const evaluationElement = document.getElementById('evaluation');
-    if (evaluationElement) {
-        evaluationElement.className = 'badge bg-secondary';
-    }
-
-    // Clear best move highlights
-    if (board) {
-        board.setAutoShapes([]);
-    }
-}
-
-
 function updateEvaluationBar(score) {
     const indicator = document.querySelector('.evaluation-indicator');
     if (!indicator) return;
@@ -551,40 +460,16 @@ function updateEvaluationBar(score) {
     indicator.style.left = `${percentage}%`;
 }
 
-//async function onMoveComplete(orig, dest, metadata) {
-//    console.log('Move made:', orig, dest);
-
-//    const move = orig + dest;
-
-//    // Add move to history
-//    const newMove = {
-//        move: move,
-//        from: orig,
-//        to: dest,
-//        san: move, // TODO: Convert to SAN notation
-//        fen: currentFen,
-//        timestamp: new Date()
-//    };
-
-//    // If we're not at the end of history, truncate future moves
-//    if (currentMoveIndex < moveHistory.length - 1) {
-//        moveHistory = moveHistory.slice(0, currentMoveIndex + 1);
-//    }
-
-//    moveHistory.push(newMove);
-//    currentMoveIndex = moveHistory.length - 1;
-
-//    // Update UI
-//    updateUI();
-
-//    // Trigger engine analysis if enabled
-//    if (analysisEnabled && engineConnected) {
-//        requestEngineAnalysis();
-//    }
-//}
-
+// FIXED: Move completion with proper FEN updates
 function onMoveComplete(orig, dest, metadata) {
     console.log('Move made:', orig, dest);
+
+    // FIXED: Properly update the FEN after the move
+    // We need to calculate the new FEN based on the move
+    const newFen = calculateFenAfterMove(currentFen, orig, dest);
+    currentFen = newFen;
+
+    console.log('📋 Updated FEN after move:', currentFen);
 
     const move = orig + dest;
 
@@ -606,56 +491,103 @@ function onMoveComplete(orig, dest, metadata) {
     moveHistory.push(newMove);
     currentMoveIndex = moveHistory.length - 1;
 
-    // Update the current FEN to the board's current position
-    // This is crucial - get the FEN from the board after the move
-    currentFen = board.getFen();
+    // Update UI
+    updateUI();
 
-    // Send move to server for validation (if implemented)
-    validateMoveOnServer(move).then(data => {
-        if (data && data.success) {
-            // If server validation is successful, use the server's FEN
-            currentFen = data.fen;
-        }
-
-        updateUI();
-
-        if (analysisEnabled) {
-            console.log('Requesting engine analysis after move...');
-            requestEngineAnalysis();
-        }
-    }).catch(error => {
-        console.log('Server validation not implemented, continuing with client-side');
-        // FEN is already updated above from board.getFen()
-
-        updateUI();
-
-        if (analysisEnabled) {
-            console.log('Requesting engine analysis after move (client-side)...');
-            requestEngineAnalysis();
-        }
-    });
+    // Request new analysis if enabled
+    if (analysisEnabled && engineConnected) {
+        console.log('🔄 Requesting analysis after move...');
+        setTimeout(() => requestEngineAnalysis(), 300); // Small delay to let board settle
+    }
 }
 
-async function validateMoveOnServer(move) {
-    try {
-        const response = await fetch('/Chess/MakeMove', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value || ''
-            },
-            body: JSON.stringify({
-                fen: currentFen,
-                move: move
-            })
-        });
+// FIXED: Calculate FEN after move (better version)
+function calculateFenAfterMove(fen, from, to) {
+    const parts = fen.split(' ');
 
-        if (!response.ok) throw new Error('Server validation failed');
+    // Parse the board position (first part of FEN)
+    const rows = parts[0].split('/');
+    const board = [];
 
-        return await response.json();
-    } catch (error) {
-        // Server validation not implemented
-        return null;
+    // Convert FEN rows to 2D array
+    for (let i = 0; i < 8; i++) {
+        board[i] = [];
+        let col = 0;
+        for (let char of rows[i]) {
+            if (char >= '1' && char <= '8') {
+                // Empty squares
+                const count = parseInt(char);
+                for (let j = 0; j < count; j++) {
+                    board[i][col++] = '';
+                }
+            } else {
+                // Piece
+                board[i][col++] = char;
+            }
+        }
+    }
+
+    // Convert square notation to array indices
+    const fromCol = from.charCodeAt(0) - 'a'.charCodeAt(0);
+    const fromRow = 8 - parseInt(from[1]);
+    const toCol = to.charCodeAt(0) - 'a'.charCodeAt(0);
+    const toRow = 8 - parseInt(to[1]);
+
+    // Move the piece
+    const piece = board[fromRow][fromCol];
+    board[fromRow][fromCol] = '';
+    board[toRow][toCol] = piece;
+
+    // Convert back to FEN
+    const newRows = [];
+    for (let i = 0; i < 8; i++) {
+        let rowStr = '';
+        let emptyCount = 0;
+
+        for (let j = 0; j < 8; j++) {
+            if (board[i][j] === '') {
+                emptyCount++;
+            } else {
+                if (emptyCount > 0) {
+                    rowStr += emptyCount;
+                    emptyCount = 0;
+                }
+                rowStr += board[i][j];
+            }
+        }
+        if (emptyCount > 0) {
+            rowStr += emptyCount;
+        }
+        newRows.push(rowStr);
+    }
+
+    // Update FEN parts
+    parts[0] = newRows.join('/');
+    parts[1] = parts[1] === 'w' ? 'b' : 'w'; // Flip turn
+
+    // Increment halfmove clock
+    if (parts[4]) {
+        parts[4] = String(parseInt(parts[4]) + 1);
+    }
+
+    // Increment fullmove number if it's now White's turn
+    if (parts[1] === 'w' && parts[5]) {
+        parts[5] = String(parseInt(parts[5]) + 1);
+    }
+
+    return parts.join(' ');
+}
+
+function updateEngineStatus(status, text) {
+    const statusIndicator = document.getElementById('engineStatus');
+    const statusText = document.getElementById('engineStatusText');
+
+    if (statusIndicator) {
+        statusIndicator.className = `status-indicator status-${status}`;
+    }
+
+    if (statusText) {
+        statusText.textContent = text;
     }
 }
 
@@ -672,8 +604,8 @@ function resetBoard() {
 
     updateUI();
 
-    if (analysisEnabled) {
-        requestEngineAnalysis();
+    if (analysisEnabled && engineConnected) {
+        setTimeout(() => requestEngineAnalysis(), 300);
     }
 }
 
@@ -697,6 +629,39 @@ async function toggleAnalysis() {
             await currentEngine.stop();
         }
         board.setAutoShapes([]); // Clear best move highlight
+        clearEngineAnalysis();
+    }
+}
+
+// Clear analysis display
+function clearEngineAnalysis() {
+    const elements = {
+        'evaluation': '+0.00',
+        'best-move': '--',
+        'depth': '--',
+        'pv-line': '--'
+    };
+
+    Object.entries(elements).forEach(([id, defaultValue]) => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.textContent = defaultValue;
+        }
+    });
+
+    const evalBarElement = document.querySelector('.evaluation-indicator');
+    if (evalBarElement) {
+        evalBarElement.style.left = '50%';
+    }
+
+    const evaluationElement = document.getElementById('evaluation');
+    if (evaluationElement) {
+        evaluationElement.className = 'badge bg-secondary';
+    }
+
+    // Clear best move highlights
+    if (board) {
+        board.setAutoShapes([]);
     }
 }
 
@@ -809,125 +774,104 @@ function goToStart() {
 
     updateUI();
 
-    if (analysisEnabled) {
+    if (analysisEnabled && engineConnected) {
         requestEngineAnalysis();
     }
 }
 
 function goToPrevious() {
-    if (currentMoveIndex > 0) {
-        currentMoveIndex--;
+    if (currentMoveIndex <= -1) return;
+
+    currentMoveIndex--;
+
+    if (currentMoveIndex === -1) {
+        currentFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+        board.set({
+            fen: currentFen,
+            lastMove: null
+        });
+    } else {
         const move = moveHistory[currentMoveIndex];
         currentFen = move.fen;
-
         board.set({
             fen: currentFen,
             lastMove: [move.from, move.to]
         });
+    }
 
-        updateUI();
+    updateUI();
 
-        if (analysisEnabled) {
-            requestEngineAnalysis();
-        }
-    } else {
-        goToStart();
+    if (analysisEnabled && engineConnected) {
+        requestEngineAnalysis();
     }
 }
 
 function goToNext() {
-    if (currentMoveIndex < moveHistory.length - 1) {
-        currentMoveIndex++;
-        const move = moveHistory[currentMoveIndex];
-        currentFen = move.fen;
+    if (currentMoveIndex >= moveHistory.length - 1) return;
 
-        board.set({
-            fen: currentFen,
-            lastMove: [move.from, move.to]
-        });
+    currentMoveIndex++;
+    const move = moveHistory[currentMoveIndex];
+    currentFen = move.fen;
 
-        updateUI();
+    board.set({
+        fen: currentFen,
+        lastMove: [move.from, move.to]
+    });
 
-        if (analysisEnabled) {
-            requestEngineAnalysis();
-        }
+    updateUI();
+
+    if (analysisEnabled && engineConnected) {
+        requestEngineAnalysis();
     }
 }
 
 function goToEnd() {
-    if (moveHistory.length > 0) {
-        currentMoveIndex = moveHistory.length - 1;
-        const move = moveHistory[currentMoveIndex];
-        currentFen = move.fen;
+    if (moveHistory.length === 0) return;
 
-        board.set({
-            fen: currentFen,
-            lastMove: [move.from, move.to]
-        });
+    currentMoveIndex = moveHistory.length - 1;
+    const move = moveHistory[currentMoveIndex];
+    currentFen = move.fen;
 
-        updateUI();
+    board.set({
+        fen: currentFen,
+        lastMove: [move.from, move.to]
+    });
 
-        if (analysisEnabled) {
-            requestEngineAnalysis();
-        }
+    updateUI();
+
+    if (analysisEnabled && engineConnected) {
+        requestEngineAnalysis();
     }
 }
 
 function goToMove(index) {
-    if (index >= 0 && index < moveHistory.length) {
-        currentMoveIndex = index;
+    if (index < -1 || index >= moveHistory.length) return;
+
+    currentMoveIndex = index;
+
+    if (index === -1) {
+        currentFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+        board.set({
+            fen: currentFen,
+            lastMove: null
+        });
+    } else {
         const move = moveHistory[index];
         currentFen = move.fen;
-
         board.set({
             fen: currentFen,
             lastMove: [move.from, move.to]
         });
+    }
 
-        updateUI();
+    updateUI();
 
-        if (analysisEnabled) {
-            requestEngineAnalysis();
-        }
+    if (analysisEnabled && engineConnected) {
+        requestEngineAnalysis();
     }
 }
 
-// Keyboard shortcuts
-function handleKeyboardShortcuts(e) {
-    // Arrow keys for navigation
-    switch (e.key) {
-        case 'ArrowLeft':
-            e.preventDefault();
-            goToPrevious();
-            break;
-        case 'ArrowRight':
-            e.preventDefault();
-            goToNext();
-            break;
-        case 'ArrowUp':
-            e.preventDefault();
-            goToStart();
-            break;
-        case 'ArrowDown':
-            e.preventDefault();
-            goToEnd();
-            break;
-        case 'f':
-            if (!e.ctrlKey && !e.metaKey) {
-                e.preventDefault();
-                flipBoard();
-            }
-            break;
-        case 'a':
-            if (!e.ctrlKey && !e.metaKey) {
-                e.preventDefault();
-                toggleAnalysis();
-            }
-            break;
-    }
-}
-
-// FEN handling
+// FEN functions
 function copyFEN() {
     navigator.clipboard.writeText(currentFen).then(() => {
         showNotification('FEN copied to clipboard!', 'success');
@@ -939,74 +883,104 @@ function copyFEN() {
 
 function pasteFEN() {
     const fenModal = new bootstrap.Modal(document.getElementById('fenModal'));
+    document.getElementById('fenInput').value = currentFen;
     fenModal.show();
 }
 
 function applyFEN() {
-    const fenInput = document.getElementById('fenInput');
-    const newFen = fenInput.value.trim();
+    const fenInput = document.getElementById('fenInput').value.trim();
 
-    if (newFen && isValidFEN(newFen)) {
-        currentFen = newFen;
+    if (!fenInput) {
+        showNotification('Please enter a FEN string', 'error');
+        return;
+    }
+
+    // Basic FEN validation
+    const fenParts = fenInput.split(' ');
+    if (fenParts.length !== 6) {
+        showNotification('Invalid FEN format', 'error');
+        return;
+    }
+
+    try {
+        currentFen = fenInput;
+        board.set({ fen: currentFen });
+
+        // Reset move history when setting new position
         moveHistory = [];
         currentMoveIndex = -1;
 
-        board.set({
-            fen: currentFen,
-            lastMove: null
-        });
-
         updateUI();
-
-        if (analysisEnabled) {
-            requestEngineAnalysis();
-        }
 
         const fenModal = bootstrap.Modal.getInstance(document.getElementById('fenModal'));
         fenModal.hide();
 
         showNotification('Position loaded successfully!', 'success');
-    } else {
-        showNotification('Invalid FEN string!', 'error');
+
+        if (analysisEnabled && engineConnected) {
+            requestEngineAnalysis();
+        }
+    } catch (error) {
+        console.error('Failed to apply FEN:', error);
+        showNotification('Invalid FEN position', 'error');
     }
 }
 
-function isValidFEN(fen) {
-    // Basic FEN validation
-    const parts = fen.split(' ');
-    return parts.length === 6;
+// Keyboard shortcuts
+function handleKeyboardShortcuts(event) {
+    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+        return; // Don't handle shortcuts when typing in inputs
+    }
+
+    switch (event.key) {
+        case 'ArrowLeft':
+            event.preventDefault();
+            goToPrevious();
+            break;
+        case 'ArrowRight':
+            event.preventDefault();
+            goToNext();
+            break;
+        case 'Home':
+            event.preventDefault();
+            goToStart();
+            break;
+        case 'End':
+            event.preventDefault();
+            goToEnd();
+            break;
+        case 'f':
+            event.preventDefault();
+            flipBoard();
+            break;
+        case 'r':
+            event.preventDefault();
+            resetBoard();
+            break;
+        case 'a':
+            event.preventDefault();
+            toggleAnalysis();
+            break;
+    }
 }
 
 // Utility functions
 function showNotification(message, type = 'info') {
-    console.log(`[${type.toUpperCase()}] ${message}`);
+    // Create a simple toast notification
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 250px;';
+    toast.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+    `;
 
-    // You can implement a proper notification system here
-    // For now, just log to console
+    document.body.appendChild(toast);
 
-    // Example: Show a Bootstrap toast or alert
-    if (typeof bootstrap !== 'undefined') {
-        // Create and show a toast notification
-        const toastHtml = `
-            <div class="toast align-items-center text-white bg-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'primary'} border-0" role="alert">
-                <div class="d-flex">
-                    <div class="toast-body">${message}</div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-                </div>
-            </div>
-        `;
-
-        const toastContainer = document.createElement('div');
-        toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
-        toastContainer.innerHTML = toastHtml;
-        document.body.appendChild(toastContainer);
-
-        const toast = new bootstrap.Toast(toastContainer.querySelector('.toast'));
-        toast.show();
-
-        // Remove container after toast hides
-        toastContainer.querySelector('.toast').addEventListener('hidden.bs.toast', () => {
-            toastContainer.remove();
-        });
-    }
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.remove();
+        }
+    }, 3000);
 }
