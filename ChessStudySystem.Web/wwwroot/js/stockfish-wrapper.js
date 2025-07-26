@@ -151,15 +151,16 @@ class StockfishWrapper {
         this.onReady();
     }
 
-    // NEW: Specific setup for Lichess Stockfish
+    // 1. In stockfish-wrapper.js, fix the setupLichessStockfishAPI method:
+
     setupLichessStockfishAPI() {
         console.log('✅ Using Lichess Stockfish API (listen + uci)');
 
-        // Set up the listen callback to receive messages from the engine
-        this.instance.listen((message) => {
+        // IMPORTANT: We need to replace the listen handler, not call it
+        this.instance.listen = (message) => {
             console.log('🔍 Lichess Stockfish message:', message);
             this.handleMessage(message);
-        });
+        };
 
         // Use the uci method to send commands
         this.sendCommand = (cmd) => {

@@ -195,8 +195,8 @@ class LichessStockfishEngine {
         this.currentEval = null;
         this.onError = null;
 
-        // Set up message handler
-        this.wrapper.addMessageHandler((message) => {
+        // Set up message handler - FIX THE TYPO HERE
+        this.wrapper.addMessageHandler((message) => {  // was addMessageHandle (missing 'r')
             this.handleMessage(message);
         });
     }
@@ -243,17 +243,40 @@ class LichessStockfishEngine {
         }
     }
 
+    // In chess-engines.js, replace the parseInfo method with this:
+
+    // In chess-engines.js, replace these two methods in the LichessStockfishEngine class:
+
     parseInfo(line) {
-        // Basic info parsing
+        // Parse the score and convert to proper format
+        let score = null;
+        if (line.includes('score cp')) {
+            const match = line.match(/score cp (-?\d+)/);
+            if (match) {
+                // Convert centipawns to pawns
+                score = parseInt(match[1]) / 100;
+            }
+        } else if (line.includes('score mate')) {
+            const match = line.match(/score mate (-?\d+)/);
+            if (match) {
+                score = `M${match[1]}`;
+            }
+        }
+
+        // Store the evaluation
         this.currentEval = {
             depth: this.extractValue(line, 'depth'),
-            score: this.parseScore(line),
+            score: score,  // Now this is either a number or "M#" string
             nodes: this.extractValue(line, 'nodes'),
             nps: this.extractValue(line, 'nps'),
             time: this.extractValue(line, 'time'),
             pv: this.extractPV(line)
         };
+
+        console.log('📊 Parsed evaluation:', this.currentEval);
     }
+
+    // You can remove the parseScore method entirely since we're handling it directly in parseInfo
 
     extractValue(line, key) {
         const regex = new RegExp(`${key}\\s+(\\d+)`);

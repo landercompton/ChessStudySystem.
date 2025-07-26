@@ -1,4 +1,5 @@
 ﻿// Chess Study JavaScript with Fixed Engine Integration
+let chessGame = new Chess();
 let board;
 let currentFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 let moveHistory = [];
@@ -41,7 +42,45 @@ document.addEventListener('DOMContentLoaded', function () {
     waitForChessground();
     initializeUI();
 });
+// Update the initializeBoard function to sync with chess.js:
+function initializeBoard() {
+    console.log('🎯 Initializing chess study board...');
 
+    // Initialize chess.js with starting position
+    chessGame = new Chess();
+    currentFen = chessGame.fen();
+
+    // Get legal moves for the current position
+    const moves = getLegalMoves();
+
+    board = Chessground(document.getElementById('chessboard'), {
+        fen: currentFen,
+        movable: {
+            free: false,
+            dests: moves,
+            events: {
+                after: onMoveComplete
+            }
+        },
+        draggable: {
+            enabled: true
+        },
+        highlight: {
+            lastMove: true,
+            check: true
+        },
+        animation: {
+            enabled: true,
+            duration: 200
+        }
+    });
+
+    console.log('♕ Chess study board created successfully!');
+    console.log('🎲 Board state:', board.state);
+
+    updateLegalMoves();
+    updatePositionInfo();
+}
 function initializeChessboard() {
     console.log('🎯 Initializing chess study board...');
 
@@ -461,24 +500,37 @@ function updateEvaluationBar(score) {
 }
 
 // FIXED: Move completion with proper FEN updates
+// Replace the onMoveComplete function:
 function onMoveComplete(orig, dest, metadata) {
     console.log('Move made:', orig, dest);
 
-    // FIXED: Properly update the FEN after the move
-    // We need to calculate the new FEN based on the move
-    const newFen = calculateFenAfterMove(currentFen, orig, dest);
-    currentFen = newFen;
+    // Create the move object
+    const move = {
+        from: orig,
+        to: dest,
+        promotion: metadata?.promotion || undefined
+    };
 
+    // Try to make the move in chess.js
+    const result = chessGame.move(move);
+
+    if (!result) {
+        console.error('Invalid move!', move);
+        // Reset the board to current position
+        board.set({ fen: currentFen });
+        return;
+    }
+
+    // Get the new FEN from chess.js
+    currentFen = chessGame.fen();
     console.log('📋 Updated FEN after move:', currentFen);
-
-    const move = orig + dest;
 
     // Add move to history
     const newMove = {
-        move: move,
+        move: orig + dest,
         from: orig,
         to: dest,
-        san: move, // TODO: Convert to SAN notation
+        san: result.san, // Proper SAN notation from chess.js
         fen: currentFen,
         timestamp: new Date()
     };
@@ -497,7 +549,7 @@ function onMoveComplete(orig, dest, metadata) {
     // Request new analysis if enabled
     if (analysisEnabled && engineConnected) {
         console.log('🔄 Requesting analysis after move...');
-        setTimeout(() => requestEngineAnalysis(), 300); // Small delay to let board settle
+        setTimeout(() => requestEngineAnalysis(), 300);
     }
 }
 
@@ -591,15 +643,18 @@ function updateEngineStatus(status, text) {
     }
 }
 
-// Board control functions
 function resetBoard() {
-    currentFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    chessGame.reset();
+    currentFen = chessGame.fen();
     moveHistory = [];
     currentMoveIndex = -1;
 
     board.set({
         fen: currentFen,
-        lastMove: null
+        lastMove: null,
+        movable: {
+            dests: getLegalMoves()
+        }
     });
 
     updateUI();
@@ -765,11 +820,15 @@ function goToStart() {
     if (moveHistory.length === 0) return;
 
     currentMoveIndex = -1;
-    currentFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    chessGame.reset(); // Reset chess.js to starting position
+    currentFen = chessGame.fen();
 
     board.set({
         fen: currentFen,
-        lastMove: null
+        lastMove: null,
+        movable: {
+            dests: getLegalMoves()
+        }
     });
 
     updateUI();
@@ -844,23 +903,41 @@ function goToEnd() {
     }
 }
 
+// Update the navigation functions to properly reconstruct positions:
 function goToMove(index) {
     if (index < -1 || index >= moveHistory.length) return;
 
+    // Reset to start position
+    chessGame.reset();
+
+    // Replay moves up to the selected index
+    for (let i = 0; i <= index; i++) {
+        const move = moveHistory[i];
+        chessGame.move({
+            from: move.from,
+            to: move.to
+        });
+    }
+
     currentMoveIndex = index;
+    currentFen = chessGame.fen();
 
     if (index === -1) {
-        currentFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
         board.set({
             fen: currentFen,
-            lastMove: null
+            lastMove: null,
+            movable: {
+                dests: getLegalMoves()
+            }
         });
     } else {
         const move = moveHistory[index];
-        currentFen = move.fen;
         board.set({
             fen: currentFen,
-            lastMove: [move.from, move.to]
+            lastMove: [move.from, move.to],
+            movable: {
+                dests: getLegalMoves()
+            }
         });
     }
 
@@ -887,6 +964,7 @@ function pasteFEN() {
     fenModal.show();
 }
 
+// Update applyFEN to sync with chess.js:
 function applyFEN() {
     const fenInput = document.getElementById('fenInput').value.trim();
 
@@ -895,16 +973,23 @@ function applyFEN() {
         return;
     }
 
-    // Basic FEN validation
-    const fenParts = fenInput.split(' ');
-    if (fenParts.length !== 6) {
-        showNotification('Invalid FEN format', 'error');
-        return;
-    }
-
     try {
+        // Validate FEN with chess.js
+        const testGame = new Chess(fenInput);
+        if (!testGame) {
+            throw new Error('Invalid FEN');
+        }
+
+        // Update both chess.js and board
+        chessGame = testGame;
         currentFen = fenInput;
-        board.set({ fen: currentFen });
+
+        board.set({
+            fen: currentFen,
+            movable: {
+                dests: getLegalMoves()
+            }
+        });
 
         // Reset move history when setting new position
         moveHistory = [];
@@ -983,4 +1068,19 @@ function showNotification(message, type = 'info') {
             toast.remove();
         }
     }, 3000);
+}
+
+// Update getLegalMoves to use chess.js:
+function getLegalMoves() {
+    const dests = new Map();
+    const moves = chessGame.moves({ verbose: true });
+
+    moves.forEach(move => {
+        if (!dests.has(move.from)) {
+            dests.set(move.from, []);
+        }
+        dests.get(move.from).push(move.to);
+    });
+
+    return dests;
 }
