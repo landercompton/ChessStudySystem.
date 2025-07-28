@@ -216,6 +216,10 @@ class LichessStockfishEngine {
         }
     }
 
+
+
+
+
     handleMessage(message) {
         console.log('🔍 Engine message:', message);
 
@@ -314,6 +318,8 @@ class LichessStockfishEngine {
         });
     }
 
+
+
     async uci() {
         await this.sendCommand('uci');
         return new Promise((resolve) => {
@@ -341,6 +347,9 @@ class LichessStockfishEngine {
         });
     }
 
+
+
+
     async setPosition(fen = 'startpos', moves = []) {
         let command = 'position ';
         if (fen === 'startpos') {
@@ -356,6 +365,10 @@ class LichessStockfishEngine {
         await this.sendCommand(command);
     }
 
+    // In chess-engines.js, find the analyze method in the LichessStockfishEngine class
+    // and replace it with this updated version:
+
+    // This should be inside the LichessStockfishEngine class definition
     async analyze(options = {}) {
         const {
             depth = 20,
@@ -374,13 +387,27 @@ class LichessStockfishEngine {
             if (moveTime) command += ` movetime ${moveTime}`;
         }
 
+        console.log('🎲 Starting analysis with command:', command);
+
         await this.sendCommand(command);
 
         return new Promise((resolve) => {
-            this.messageHandlers.set('bestmove', (result) => {
+            const bestmoveHandler = (result) => {
+                console.log('🎯 Bestmove received in analyze:', result);
                 this.messageHandlers.delete('bestmove');
                 resolve(result);
-            });
+            };
+
+            this.messageHandlers.set('bestmove', bestmoveHandler);
+
+            // Add timeout to prevent hanging
+            setTimeout(() => {
+                if (this.messageHandlers.has('bestmove')) {
+                    console.log('⏱️ Analysis timeout, no bestmove received');
+                    this.messageHandlers.delete('bestmove');
+                    resolve(null);
+                }
+            }, (moveTime || 5000) + 2000); // Give extra time for response
         });
     }
 

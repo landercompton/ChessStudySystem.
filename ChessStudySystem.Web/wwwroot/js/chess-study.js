@@ -7,6 +7,10 @@ let currentMoveIndex = -1;
 let analysisEnabled = true;
 let engineConnected = false;
 let currentEngine = null;
+let enginePlayMode = false;
+let engineColor = 'black'; // 'white' or 'black'
+let engineThinking = false;
+let engineStrength = 20; // Depth for engine moves
 
 // Wait for local Chessground to load
 function waitForChessground() {
@@ -31,6 +35,138 @@ function waitForChessground() {
     }
 }
 
+// In chess-study.js, update the makeEngineMove function:
+
+// Function to handle engine moves
+async function makeEngineMove() {
+    if (!engineConnected || !currentEngine || engineThinking) return;
+
+    engineThinking = true;
+    updateEngineStatus('analyzing', 'Engine thinking...');
+
+    console.log('🤖 Engine making move for position:', currentFen);
+
+    try {
+        // Set position
+        await currentEngine.setPosition(currentFen);
+
+        // Get best move using the existing analyze method
+        const engineMove = await currentEngine.analyze({
+            depth: engineStrength,
+            moveTime: 3000 // 3 seconds for better analysis
+        });
+
+        console.log('🎯 Engine suggests move:', engineMove);
+
+        if (engineMove && engineMove.length >= 4) {
+            const from = engineMove.substring(0, 2);
+            const to = engineMove.substring(2, 4);
+            const promotion = engineMove.length > 4 ? engineMove[4] : undefined;
+
+            console.log('🎮 Making engine move:', from, '->', to);
+
+            // Make the move in chess.js
+            const move = chessGame.move({
+                from: from,
+                to: to,
+                promotion: promotion
+            });
+
+            if (move) {
+                // Update the board visually
+                board.move(from, to);
+
+                // Update FEN and history
+                currentFen = chessGame.fen();
+
+                const newMove = {
+                    move: engineMove,
+                    from: from,
+                    to: to,
+                    san: move.san,
+                    fen: currentFen,
+                    timestamp: new Date()
+                };
+
+                if (currentMoveIndex < moveHistory.length - 1) {
+                    moveHistory = moveHistory.slice(0, currentMoveIndex + 1);
+                }
+
+                moveHistory.push(newMove);
+                currentMoveIndex = moveHistory.length - 1;
+
+                // Update board state with legal moves for the player
+                board.set({
+                    fen: currentFen,
+                    lastMove: [from, to],
+                    movable: {
+                        dests: getLegalMoves()
+                    }
+                });
+
+                updateUI();
+
+                // Continue analysis if enabled (but not in play mode)
+                if (analysisEnabled && !enginePlayMode) {
+                    setTimeout(() => requestEngineAnalysis(), 500);
+                }
+            } else {
+                console.error('❌ Invalid engine move:', engineMove);
+            }
+        } else {
+            console.error('❌ No valid move from engine');
+        }
+    } catch (error) {
+        console.error('❌ Engine move error:', error);
+    } finally {
+        engineThinking = false;
+        updateEngineStatus('connected', 'Connected');
+    }
+}
+// Also add some debug logging to the existing analyze method to see what's happening:
+// In chess-engines.js, update the analyze method to add logging:
+
+async function analyze(options = {}) {
+    const {
+        depth = 20,
+        nodes = null,
+        moveTime = null,
+        infinite = false
+    } = options;
+
+    let command = 'go';
+
+    if (infinite) {
+        command += ' infinite';
+    } else {
+        if (depth) command += ` depth ${depth}`;
+        if (nodes) command += ` nodes ${nodes}`;
+        if (moveTime) command += ` movetime ${moveTime}`;
+    }
+
+    console.log('🎲 Starting analysis with command:', command);
+
+    await this.sendCommand(command);
+
+    return new Promise((resolve) => {
+        const bestmoveHandler = (result) => {
+            console.log('🎯 Bestmove received in analyze:', result);
+            this.messageHandlers.delete('bestmove');
+            resolve(result);
+        };
+
+        this.messageHandlers.set('bestmove', bestmoveHandler);
+
+        // Add timeout to prevent hanging
+        setTimeout(() => {
+            if (this.messageHandlers.has('bestmove')) {
+                console.log('⏱️ Analysis timeout, no bestmove received');
+                this.messageHandlers.delete('bestmove');
+                resolve(null);
+            }
+        }, (moveTime || 5000) + 2000); // Give extra time for response
+    });
+}
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', function () {
     const boardElement = document.getElementById('chessboard');
@@ -334,8 +470,8 @@ function parseInfoMessage(message) {
     return info;
 }
 
-// FIXED: Proper engine analysis request
-async function requestEngineAnalysis() {
+// Improve the analysis request to use appropriate depth:
+function requestEngineAnalysis() {
     if (!engineConnected || !currentEngine) {
         console.log('❌ Engine not connected or available');
         return;
@@ -352,12 +488,12 @@ async function requestEngineAnalysis() {
         board.setAutoShapes([]);
 
         // Set the current position in the engine
-        await currentEngine.setPosition(currentFen);
-
-        // Start analysis
-        currentEngine.analyze({
-            depth: 20,
-            moveTime: 2000 // Analyze for 2 seconds
+        currentEngine.setPosition(currentFen).then(() => {
+            // Start deeper analysis for better suggestions
+            currentEngine.analyze({
+                depth: 22,  // Increased depth for better analysis
+                moveTime: 5000  // 5 seconds for thorough analysis
+            });
         });
 
         updateEngineStatus('connected', 'Connected');
@@ -367,7 +503,6 @@ async function requestEngineAnalysis() {
         updateEngineStatus('connected', 'Connected');
     }
 }
-
 // Debug version of updateEngineAnalysis
 function updateEngineAnalysis(info) {
     console.log('🎯 updateEngineAnalysis called with:', info);
@@ -499,8 +634,7 @@ function updateEvaluationBar(score) {
     indicator.style.left = `${percentage}%`;
 }
 
-// FIXED: Move completion with proper FEN updates
-// Replace the onMoveComplete function:
+// Update onMoveComplete to trigger engine moves:
 function onMoveComplete(orig, dest, metadata) {
     console.log('Move made:', orig, dest);
 
@@ -516,7 +650,6 @@ function onMoveComplete(orig, dest, metadata) {
 
     if (!result) {
         console.error('Invalid move!', move);
-        // Reset the board to current position
         board.set({ fen: currentFen });
         return;
     }
@@ -527,15 +660,14 @@ function onMoveComplete(orig, dest, metadata) {
 
     // Add move to history
     const newMove = {
-        move: orig + dest,
+        move: orig + dest + (metadata?.promotion || ''),
         from: orig,
         to: dest,
-        san: result.san, // Proper SAN notation from chess.js
+        san: result.san,
         fen: currentFen,
         timestamp: new Date()
     };
 
-    // If we're not at the end of history, truncate future moves
     if (currentMoveIndex < moveHistory.length - 1) {
         moveHistory = moveHistory.slice(0, currentMoveIndex + 1);
     }
@@ -543,13 +675,38 @@ function onMoveComplete(orig, dest, metadata) {
     moveHistory.push(newMove);
     currentMoveIndex = moveHistory.length - 1;
 
-    // Update UI
     updateUI();
 
-    // Request new analysis if enabled
-    if (analysisEnabled && engineConnected) {
+    // Check if it's engine's turn
+    const isWhiteTurn = currentFen.includes(' w ');
+    if (enginePlayMode && !engineThinking) {
+        if ((engineColor === 'white' && isWhiteTurn) ||
+            (engineColor === 'black' && !isWhiteTurn)) {
+            setTimeout(() => makeEngineMove(), 500);
+        }
+    }
+
+    // Continue analysis if not in play mode
+    if (analysisEnabled && engineConnected && !enginePlayMode) {
         console.log('🔄 Requesting analysis after move...');
         setTimeout(() => requestEngineAnalysis(), 300);
+    }
+}
+
+// Add function to toggle play mode:
+function togglePlayMode() {
+    enginePlayMode = !enginePlayMode;
+
+    if (enginePlayMode) {
+        // Disable analysis mode when playing
+        if (analysisEnabled) {
+            toggleAnalysis();
+        }
+
+        // Show play mode controls
+        showPlayModeDialog();
+    } else {
+        updatePlayModeButton();
     }
 }
 
@@ -1083,4 +1240,127 @@ function getLegalMoves() {
     });
 
     return dests;
+}
+
+// Add function to show play mode dialog:
+function showPlayModeDialog() {
+    const dialog = document.createElement('div');
+    dialog.className = 'modal fade';
+    dialog.innerHTML = `
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Play Against Engine</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Choose your color:</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="colorChoice" id="playWhite" checked>
+                            <label class="btn btn-outline-primary" for="playWhite">
+                                <i class="fas fa-chess-king"></i> Play as White
+                            </label>
+                            <input type="radio" class="btn-check" name="colorChoice" id="playBlack">
+                            <label class="btn btn-outline-primary" for="playBlack">
+                                <i class="fas fa-chess-king text-dark"></i> Play as Black
+                            </label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Engine Strength: <span id="strengthValue">20</span></label>
+                        <input type="range" class="form-range" id="engineStrengthSlider" 
+                               min="1" max="25" value="20" step="1">
+                        <small class="text-muted">Lower = Easier, Higher = Stronger</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="startEngineGame()">Start Game</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(dialog);
+    const modal = new bootstrap.Modal(dialog);
+
+    // Update strength display
+    dialog.querySelector('#engineStrengthSlider').addEventListener('input', (e) => {
+        dialog.querySelector('#strengthValue').textContent = e.target.value;
+    });
+
+    dialog.addEventListener('hidden.bs.modal', () => {
+        dialog.remove();
+        if (!document.querySelector('.modal.show')) {
+            enginePlayMode = false;
+            updatePlayModeButton();
+        }
+    });
+
+    modal.show();
+}
+
+// Add function to start engine game:
+// Update the startEngineGame function to ensure engine moves first when playing White:
+
+function startEngineGame() {
+    const playAsWhite = document.getElementById('playWhite').checked;
+    engineColor = playAsWhite ? 'black' : 'white';
+    engineStrength = parseInt(document.getElementById('engineStrengthSlider').value);
+
+    console.log('🎮 Starting game - Player:', playAsWhite ? 'White' : 'Black', 'Engine:', engineColor);
+
+    // Reset board for new game
+    resetBoard();
+
+    // Set board orientation
+    board.set({
+        orientation: playAsWhite ? 'white' : 'black'
+    });
+
+    // Close modal
+    const modal = bootstrap.Modal.getInstance(document.querySelector('.modal.show'));
+    modal.hide();
+
+    updatePlayModeButton();
+
+    // If engine plays white, make first move
+    if (engineColor === 'white') {
+        console.log('🤖 Engine plays White, making first move...');
+        // Small delay to let UI settle
+        setTimeout(() => {
+            makeEngineMove();
+        }, 1000);
+    }
+}
+
+// Also update the check in onMoveComplete to ensure it's checking correctly:
+// In the onMoveComplete function, update the engine turn check:
+
+// Check if it's engine's turn
+const isWhiteTurn = currentFen.includes(' w ');
+console.log('🎮 After move - White to move:', isWhiteTurn, 'Engine color:', engineColor);
+
+if (enginePlayMode && !engineThinking) {
+    if ((engineColor === 'white' && isWhiteTurn) ||
+        (engineColor === 'black' && !isWhiteTurn)) {
+        console.log('🤖 It\'s engine\'s turn!');
+        setTimeout(() => makeEngineMove(), 500);
+    }
+}
+// Add function to update play mode button:
+function updatePlayModeButton() {
+    const button = document.getElementById('playModeToggle');
+    if (button) {
+        if (enginePlayMode) {
+            button.innerHTML = `<i class="fas fa-stop"></i> Stop Playing`;
+            button.classList.remove('btn-primary');
+            button.classList.add('btn-danger');
+        } else {
+            button.innerHTML = `<i class="fas fa-play"></i> Play vs Engine`;
+            button.classList.remove('btn-danger');
+            button.classList.add('btn-primary');
+        }
+    }
 }
