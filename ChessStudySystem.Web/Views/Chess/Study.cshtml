@@ -2,6 +2,14 @@
     ViewData["Title"] = "Chess Study";
 }
 
+<!-- Chess.js with correct CDN and integrity hash -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js" integrity="sha512-xRllwz2gdZciIB+AkEbeq+gVhX8VB8XsfqeFbUh+SzHlN96dEduwtTuVuc2u9EROlmW9+yhRlxjif66ORpsgVA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<!-- SINGLE set of Chessground CSS with CORRECT paths -->
+<link rel="stylesheet" href="~/css/chessground/chessground.base.css" />
+<link rel="stylesheet" href="~/css/chessground/chessground.brown.css" />
+<link rel="stylesheet" href="~/css/chessground/chessground.cburnett.css" />
+
 <div class="container-fluid">
     <div class="row mb-3">
         <div class="col">
@@ -103,19 +111,54 @@
             </div>
         </div>
     </div>
+
+    <!-- Add this section to your Study.cshtml, after the existing cards -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div id="gamesAnalysisContainer">
+                <!-- Games analysis UI will be inserted here by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Include the games analyzer script -->
+    <script src="~/js/lichess-games-analyzer.js"></script>
+
+    <!-- Additional CSS for the games analysis -->
+    <style>
+        .opening-analysis-results .progress {
+            min-width: 60px;
+        }
+
+        .opening-analysis-results .table td {
+            vertical-align: middle;
+        }
+
+        .opening-analysis-results .card {
+            transition: transform 0.2s;
+        }
+
+            .opening-analysis-results .card:hover {
+                transform: translateY(-2px);
+            }
+
+        .input-group .btn {
+            border-color: #198754;
+        }
+
+        .table-responsive {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .badge {
+            font-size: 0.85em;
+        }
+    </style>
 </div>
 
-<!-- Include Chess.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.0.0-beta.6/chess.min.js"></script>
-
-<!-- Include Chessground -->
-<link rel="stylesheet" href="~/js/chessground/chessground.base.css" />
-<link rel="stylesheet" href="~/js/chessground/chessground.brown.css" />
-<link rel="stylesheet" href="~/js/chessground/chessground.cburnett.css" />
-<script src="~/js/chessground/chessground.min.js"></script>
-
-<!-- Custom Chess Script -->
-<script src="~/js/chess-study-clean.js"></script>
+<!-- SINGLE JavaScript file reference -->
+<script src="~/js/chess-study.js"></script>
 
 <style>
     .evaluation-bar-container {
@@ -160,14 +203,14 @@
         background: #f8f9fa;
     }
 
-    .move-item:hover {
-        background: #e9ecef;
-    }
+        .move-item:hover {
+            background: #e9ecef;
+        }
 
-    .move-item.active {
-        background: #007bff;
-        color: white;
-    }
+        .move-item.active {
+            background: #007bff;
+            color: white;
+        }
 
     #chessboard {
         aspect-ratio: 1;
