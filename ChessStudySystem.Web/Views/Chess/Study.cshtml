@@ -5,122 +5,99 @@
 <div class="container-fluid">
     <div class="row mb-3">
         <div class="col">
-            <h2><i class="fas fa-chess"></i> Chess Study Suite</h2>
-            <p class="text-muted">Analyze positions, study games, and improve your chess with engine assistance.</p>
+            <h2><i class="fas fa-chess"></i> Chess Study</h2>
+            <p class="text-muted">Analyze chess positions with Lichess engine</p>
         </div>
     </div>
 
-    <div class="chess-container">
-        <!-- Chessboard Section -->
-        <div class="chessboard-wrapper">
-            <div id="chessboard"></div>
-        </div>
-
-        <!-- Control Panel -->
-        <div class="chess-controls">
-            <!-- Game Controls -->
-            <div class="control-section">
-                <h5><i class="fas fa-gamepad"></i> Game Controls</h5>
-                <div class="d-flex flex-wrap gap-1">
-                    <button class="btn-chess" onclick="resetBoard()" title="Reset to starting position">
-                        <i class="fas fa-undo"></i> Reset
-                    </button>
-                    <button class="btn-chess" onclick="flipBoard()" title="Flip board orientation">
-                        <i class="fas fa-sync-alt"></i> Flip
-                    </button>
-                    <button class="btn-chess" onclick="toggleAnalysis()" id="analysisToggle" title="Toggle engine analysis">
-                        <i class="fas fa-brain"></i> Analysis: ON
-                    </button>
-                    <button id="playModeToggle" class="btn-chess btn-primary" onclick="togglePlayMode()"
-                            title="Play against the engine">
-                        <i class="fas fa-play"></i> Play vs Engine
-                    </button>
-                    <button class="btn-chess btn-secondary" onclick="copyFEN()" title="Copy current position FEN">
-                        <i class="fas fa-copy"></i> Copy FEN
-                    </button>
-                    <button class="btn-chess btn-secondary" onclick="pasteFEN()" title="Paste FEN position">
-                        <i class="fas fa-paste"></i> Paste FEN
-                    </button>
+    <div class="row">
+        <!-- Chessboard Column -->
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <div id="chessboard" style="width: 100%; max-width: 600px; margin: 0 auto;"></div>
                 </div>
             </div>
+        </div>
 
-         
-            <div class="control-section">
-                <h5><i class="fas fa-robot"></i> Engine Analysis</h5>
-                <div class="mb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span><strong>Evaluation:</strong></span>
-                        <span id="evaluation" class="badge bg-secondary">+0.00</span>
-                    </div>
-                    <div class="evaluation-bar">
-                        <div class="evaluation-indicator" id="evalBar"></div>
-                    </div>
+        <!-- Analysis Panel -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-brain"></i> Engine Analysis</h5>
                 </div>
+                <div class="card-body">
+                    <!-- Analysis Controls -->
+                    <div class="mb-3">
+                        <button id="analyzeBtn" class="btn btn-primary w-100">
+                            <i class="fas fa-search"></i> Analyze Position
+                        </button>
+                    </div>
 
-                <div class="row mb-2">
-                    <div class="col-6">
+                    <!-- Evaluation Display -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <strong>Evaluation:</strong>
+                            <span id="evaluation" class="badge bg-secondary">--</span>
+                        </div>
+                        <div class="evaluation-bar-container">
+                            <div class="evaluation-bar">
+                                <div class="evaluation-indicator" id="evalBar"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Best Move -->
+                    <div class="mb-3">
                         <strong>Best Move:</strong>
-                        <div id="best-move" class="text-primary">--</div>
+                        <div id="bestMove" class="text-primary fs-5">--</div>
                     </div>
-                    <div class="col-6">
+
+                    <!-- Analysis Details -->
+                    <div class="mb-3">
                         <strong>Depth:</strong>
-                        <div id="depth" class="text-info">--</div>
+                        <span id="depth" class="text-info">--</span>
                     </div>
-                </div>
 
-                <div class="mb-2">
-                    <strong>Engine Status:</strong>
-                    <span class="status-indicator status-disconnected" id="engineStatus"></span>
-                    <span id="engineStatusText">Disconnected</span>
-                </div>
+                    <div class="mb-3">
+                        <strong>Principal Variation:</strong>
+                        <div id="principalVariation" class="small text-muted">--</div>
+                    </div>
 
-                <div class="mb-2">
-                    <strong>Principal Variation:</strong>
-                    <div id="pv-line" class="small text-muted">--</div>
+                    <!-- Status -->
+                    <div class="mb-3">
+                        <div id="analysisStatus" class="text-muted">Ready</div>
+                    </div>
                 </div>
             </div>
 
             <!-- Move History -->
-            <div class="control-section">
-                <h5><i class="fas fa-list"></i> Move History</h5>
-                <div class="move-controls mb-2">
-                    <div class="btn-group btn-group-sm" role="group">
-                        <button class="btn btn-outline-secondary" onclick="goToStart()" title="Go to start">
-                            <i class="fas fa-fast-backward"></i>
-                        </button>
-                        <button class="btn btn-outline-secondary" onclick="goToPrevious()" title="Previous move">
-                            <i class="fas fa-chevron-left"></i>
-                        </button>
-                        <button class="btn btn-outline-secondary" onclick="goToNext()" title="Next move">
-                            <i class="fas fa-chevron-right"></i>
-                        </button>
-                        <button class="btn btn-outline-secondary" onclick="goToEnd()" title="Go to end">
-                            <i class="fas fa-fast-forward"></i>
-                        </button>
-                    </div>
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6><i class="fas fa-list"></i> Move History</h6>
                 </div>
-                <div class="move-list" id="moves">
-                    <div class="text-muted text-center">No moves yet</div>
+                <div class="card-body">
+                    <div id="moveHistory" class="move-history">
+                        <div class="text-muted text-center">No moves yet</div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Position Information -->
-            <div class="control-section">
-                <h5><i class="fas fa-info-circle"></i> Position Info</h5>
-                <div class="row">
-                    <div class="col-6">
+            <!-- Position Info -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6><i class="fas fa-info-circle"></i> Position</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
                         <strong>To Move:</strong>
-                        <div id="toMove" class="text-primary">White</div>
+                        <span id="toMove" class="badge bg-primary">White</span>
                     </div>
-                    <div class="col-6">
-                        <strong>Material:</strong>
-                        <div id="material" class="text-success">Equal</div>
-                    </div>
-                </div>
-                <div class="mt-2">
-                    <strong>Current FEN:</strong>
-                    <div id="currentFEN" class="small text-muted font-monospace">
-                        rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+                    <div class="mb-2">
+                        <strong>FEN:</strong>
+                        <div id="currentFen" class="small font-monospace text-break">
+                            rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+                        </div>
                     </div>
                 </div>
             </div>
@@ -128,34 +105,71 @@
     </div>
 </div>
 
-<!-- FEN Input Modal -->
-<div class="modal fade" id="fenModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Enter FEN Position</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3">
-                    <label for="fenInput" class="form-label">FEN String:</label>
-                    <textarea class="form-control font-monospace" id="fenInput" rows="3"
-                              placeholder="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"></textarea>
-                </div>
-                <div class="text-muted small">
-                    Enter a valid FEN string to set up a specific position.
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="applyFEN()">Apply Position</button>
-            </div>
-        </div>
-    </div>
-</div>
+<!-- Include Chess.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.0.0-beta.6/chess.min.js"></script>
 
+<!-- Include Chessground -->
+<link rel="stylesheet" href="~/js/chessground/chessground.base.css" />
+<link rel="stylesheet" href="~/js/chessground/chessground.brown.css" />
+<link rel="stylesheet" href="~/js/chessground/chessground.cburnett.css" />
+<script src="~/js/chessground/chessground.min.js"></script>
 
-<script src="~/js/stockfish-wrapper.js"></script>
-<script src="~/js/chess-engines.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
-<script src="~/js/chess-study.js"></script>
+<!-- Custom Chess Script -->
+<script src="~/js/chess-study-clean.js"></script>
+
+<style>
+    .evaluation-bar-container {
+        width: 100%;
+        height: 20px;
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .evaluation-bar {
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(to right, #dc3545 0%, #ffc107 50%, #28a745 100%);
+        position: relative;
+    }
+
+    .evaluation-indicator {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        width: 3px;
+        height: 100%;
+        background: #000;
+        transform: translateX(-50%);
+        transition: left 0.3s ease;
+    }
+
+    .move-history {
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    .move-item {
+        display: inline-block;
+        padding: 2px 6px;
+        margin: 2px;
+        border-radius: 3px;
+        cursor: pointer;
+        background: #f8f9fa;
+    }
+
+    .move-item:hover {
+        background: #e9ecef;
+    }
+
+    .move-item.active {
+        background: #007bff;
+        color: white;
+    }
+
+    #chessboard {
+        aspect-ratio: 1;
+    }
+</style>
