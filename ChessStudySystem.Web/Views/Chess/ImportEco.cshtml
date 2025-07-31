@@ -1,0 +1,14 @@
+﻿@{
+    ViewData["Title"] = "Import ECO JSON";
+}
+
+<h2>@ViewData["Title"]</h2>
+
+<form asp-controller="Chess" asp-action="ImportEco" method="post" enctype="multipart/form-data">
+    @Html.AntiForgeryToken()
+    <div class="form-group">
+        <label for="jsonFile">Select a JSON file:</label>
+        <input type="file" name="jsonFile" id="jsonFile" class="form-control" accept=".json" />
+    </div>
+    <button type="submit" class="btn btn-primary">Upload</button>
+</form>

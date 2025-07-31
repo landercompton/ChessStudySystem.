@@ -15,17 +15,17 @@ if (!app.Environment.IsDevelopment())
 }
 
 // IMPORTANT: Add CORS headers for SharedArrayBuffer support
-app.Use(async (context, next) =>
-{
-    // These headers are required for SharedArrayBuffer and WebAssembly threading
-    context.Response.Headers.Add("Cross-Origin-Embedder-Policy", "require-corp");
-    context.Response.Headers.Add("Cross-Origin-Opener-Policy", "same-origin");
+//app.Use(async (context, next) =>
+//{
+//    // These headers are required for SharedArrayBuffer and WebAssembly threading
+//    context.Response.Headers.Add("Cross-Origin-Embedder-Policy", "require-corp");
+//    context.Response.Headers.Add("Cross-Origin-Opener-Policy", "same-origin");
     
-    // Optional: Add other security headers
-    context.Response.Headers.Add("Cross-Origin-Resource-Policy", "cross-origin");
+//    // Optional: Add other security headers
+//    context.Response.Headers.Add("Cross-Origin-Resource-Policy", "cross-origin");
     
-    await next();
-});
+//    await next();
+//});
 
 
 app.UseHttpsRedirection();
