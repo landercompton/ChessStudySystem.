@@ -2,13 +2,257 @@
     ViewData["Title"] = "Import ECO JSON";
 }
 
-<h2>@ViewData["Title"]</h2>
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="mb-0">
+                        <i class="fas fa-upload me-2"></i>@ViewData["Title"]
+                    </h2>
+                </div>
+                <div class="card-body">
+                    @if (TempData["Success"] != null)
+                    {
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            <i class="fas fa-check-circle me-2"></i>@TempData["Success"]
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    }
 
-<form asp-controller="Chess" asp-action="ImportEco" method="post" enctype="multipart/form-data">
-    @Html.AntiForgeryToken()
-    <div class="form-group">
-        <label for="jsonFile">Select a JSON file:</label>
-        <input type="file" name="jsonFile" id="jsonFile" class="form-control" accept=".json" />
+                    @if (TempData["Error"] != null)
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <i class="fas fa-exclamation-triangle me-2"></i>@TempData["Error"]
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    }
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>Upload Chess Opening Database</h5>
+                            <p class="text-muted">
+                                Upload a JSON file containing chess opening data with FEN positions as keys.
+                                The system will automatically validate the format before importing.
+                            </p>
+
+                            <form asp-controller="Chess" asp-action="ImportEco" method="post"
+                                  enctype="multipart/form-data" id="uploadForm">
+                                @Html.AntiForgeryToken()
+
+                                <div class="mb-3">
+                                    <label for="jsonFile" class="form-label">Select JSON File:</label>
+                                    <input type="file" name="jsonFile" id="jsonFile"
+                                           class="form-control" accept=".json" required />
+                                    <div class="form-text">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        Only JSON files accepted. Max size: 50MB
+                                    </div>
+                                </div>
+
+                                <!-- File validation info -->
+                                <div id="fileInfo" class="mb-3 d-none">
+                                    <div class="card bg-light">
+                                        <div class="card-body p-2">
+                                            <small class="text-muted">
+                                                <strong>Selected file:</strong> <span id="fileName"></span><br>
+                                                <strong>Size:</strong> <span id="fileSize"></span><br>
+                                                <strong>Status:</strong> <span id="fileStatus"></span>
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Progress bar -->
+                                <div id="progressContainer" class="mb-3 d-none">
+                                    <div class="progress">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                             role="progressbar" style="width: 0%">
+                                            <span id="progressText">Uploading...</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary" id="uploadBtn">
+                                        <i class="fas fa-cloud-upload-alt me-2"></i>Upload and Import
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <div class="col-md-6">
+                            <h5>Expected JSON Format</h5>
+                            <div class="bg-light p-3 rounded">
+                                <pre class="mb-0"><code>{
+  "rnbqkbnr/pppppppp/8/8/8/7N/PPPPPPPP/RNBQKB1R b KQkq - 1 1": {
+    "src": "eco_tsv",
+    "eco": "A00", 
+    "moves": "1. Nh3",
+    "name": "Amar Opening",
+    "scid": "A00g",
+    "aliases": {
+      "scid": "Amar/Paris Opening",
+      "eco_wikip": "Irregular Openings: Amar Opening"
+    }
+  }
+}</code></pre>
+                            </div>
+
+                            <div class="mt-3">
+                                <h6>Required Fields</h6>
+                                <ul class="list-unstyled">
+                                    <li><i class="fas fa-check text-success me-2"></i><strong>FEN key:</strong> Valid FEN position</li>
+                                    <li><i class="fas fa-check text-success me-2"></i><strong>name:</strong> Opening name</li>
+                                    <li><i class="fas fa-check text-success me-2"></i><strong>eco:</strong> ECO classification</li>
+                                </ul>
+
+                                <h6>Optional Fields</h6>
+                                <ul class="list-unstyled">
+                                    <li><i class="fas fa-circle text-muted me-2" style="font-size: 0.5rem;"></i><strong>moves:</strong> PGN moves</li>
+                                    <li><i class="fas fa-circle text-muted me-2" style="font-size: 0.5rem;"></i><strong>src:</strong> Data source</li>
+                                    <li><i class="fas fa-circle text-muted me-2" style="font-size: 0.5rem;"></i><strong>scid:</strong> SCID reference</li>
+                                    <li><i class="fas fa-circle text-muted me-2" style="font-size: 0.5rem;"></i><strong>aliases:</strong> Alternative names</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-footer">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            <i class="fas fa-database me-1"></i>
+                            Import chess opening database from ECO JSON files
+                        </small>
+                        <div class="d-flex gap-2">
+                            <a asp-action="ViewOpenings" class="btn btn-outline-secondary btn-sm">
+                                <i class="fas fa-list me-1"></i>View Database
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistics Card -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Database Statistics</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <div class="border rounded p-3">
+                                <h4 class="text-primary mb-1" id="totalOpenings">Loading...</h4>
+                                <small class="text-muted">Total Openings</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="border rounded p-3">
+                                <h4 class="text-success mb-1" id="totalEcoCodes">Loading...</h4>
+                                <small class="text-muted">ECO Codes</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="border rounded p-3">
+                                <h4 class="text-info mb-1" id="totalSources">Loading...</h4>
+                                <small class="text-muted">Data Sources</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="border rounded p-3">
+                                <h4 class="text-warning mb-1" id="lastImport">Loading...</h4>
+                                <small class="text-muted">Last Import</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-    <button type="submit" class="btn btn-primary">Upload</button>
-</form>
+</div>
+
+<script>
+    // File handling and validation
+    document.getElementById('jsonFile').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        const fileInfo = document.getElementById('fileInfo');
+
+        if (file) {
+            // Show file information
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = formatFileSize(file.size);
+
+            // Validate file
+            if (file.type === 'application/json' || file.name.endsWith('.json')) {
+                if (file.size <= 52428800) { // 50MB
+                    document.getElementById('fileStatus').innerHTML = '<span class="text-success"><i class="fas fa-check"></i> Valid</span>';
+                } else {
+                    document.getElementById('fileStatus').innerHTML = '<span class="text-danger"><i class="fas fa-times"></i> Too large</span>';
+                }
+            } else {
+                document.getElementById('fileStatus').innerHTML = '<span class="text-danger"><i class="fas fa-times"></i> Not JSON</span>';
+            }
+
+            fileInfo.classList.remove('d-none');
+        } else {
+            fileInfo.classList.add('d-none');
+        }
+    });
+
+    // Form submission with progress
+    document.getElementById('uploadForm').addEventListener('submit', function(e) {
+        const btn = document.getElementById('uploadBtn');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = progressContainer.querySelector('.progress-bar');
+        const progressText = document.getElementById('progressText');
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+        progressContainer.classList.remove('d-none');
+
+        // Simulate progress
+        let progress = 0;
+        const interval = setInterval(() => {
+            progress += Math.random() * 15;
+            if (progress > 90) progress = 90;
+
+            progressBar.style.width = progress + '%';
+            progressText.textContent = `Processing... ${Math.round(progress)}%`;
+
+            if (progress >= 90) {
+                clearInterval(interval);
+                progressText.textContent = 'Finalizing...';
+            }
+        }, 200);
+    });
+
+    // Load database statistics
+    function loadStatistics() {
+        fetch('/Chess/GetDatabaseStats')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('totalOpenings').textContent = data.totalOpenings || '0';
+                document.getElementById('totalEcoCodes').textContent = data.totalEcoCodes || '0';
+                document.getElementById('totalSources').textContent = data.totalSources || '0';
+                document.getElementById('lastImport').textContent = data.lastImport || 'Never';
+            })
+            .catch(() => {
+                document.getElementById('totalOpenings').textContent = '0';
+                document.getElementById('totalEcoCodes').textContent = '0';
+                document.getElementById('totalSources').textContent = '0';
+                document.getElementById('lastImport').textContent = 'Unknown';
+            });
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // Load statistics on page load
+    document.addEventListener('DOMContentLoaded', loadStatistics);
+</script>
