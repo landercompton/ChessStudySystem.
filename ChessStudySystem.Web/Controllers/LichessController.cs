@@ -153,28 +153,103 @@ namespace ChessStudySystem.Web.Controllers
             return View(games);
         }
 
-        public async Task<IActionResult> Search(string? username = null)
+[HttpGet]
+public async Task<IActionResult> Search(
+    string? username = null,
+    string? opponent = null,
+    string? opening = null,
+    string? ecoCode = null,
+    string? result = null,
+    string? color = null,
+    List<string>? perfTypes = null,
+    DateTime? fromDate = null,
+    DateTime? toDate = null,
+    int? minRating = null,
+    int? maxRating = null,
+    bool? ratedOnly = null,
+    bool? analyzedOnly = null,
+    string? status = null,
+    int? minMoves = null,
+    int? maxMoves = null,
+    string? sortBy = null,
+    string? sortDirection = null,
+    int page = 1,
+    int pageSize = 50)
+{
+    // If only username is provided (or no parameters), show the search form
+    if (string.IsNullOrEmpty(opponent) && string.IsNullOrEmpty(opening) && 
+        string.IsNullOrEmpty(ecoCode) && string.IsNullOrEmpty(result) && 
+        string.IsNullOrEmpty(color) && (perfTypes == null || !perfTypes.Any()) && 
+        fromDate == null && toDate == null && minRating == null && maxRating == null && 
+        ratedOnly == null && analyzedOnly == null && string.IsNullOrEmpty(status) && 
+        minMoves == null && maxMoves == null && page == 1)
+    {
+        var model = new LichessGameSearchRequest();
+        if (!string.IsNullOrEmpty(username))
         {
-            var model = new LichessGameSearchRequest();
-            if (!string.IsNullOrEmpty(username))
-            {
-                model.Username = username;
-            }
-
-            ViewBag.PerfTypes = new List<string> { "bullet", "blitz", "rapid", "classical", "correspondence" };
-            ViewBag.Results = new List<string> { "win", "loss", "draw" };
-            ViewBag.Colors = new List<string> { "white", "black" };
-            ViewBag.SortOptions = new Dictionary<string, string>
-            {
-                ["CreatedAt"] = "Date",
-                ["Rating"] = "Rating",
-                ["Opponent"] = "Opponent",
-                ["Opening"] = "Opening",
-                ["Moves"] = "Game Length"
-            };
-
-            return View(model);
+            model.Username = username;
         }
+
+        ViewBag.PerfTypes = new List<string> { "bullet", "blitz", "rapid", "classical", "correspondence" };
+        ViewBag.Results = new List<string> { "win", "loss", "draw" };
+        ViewBag.Colors = new List<string> { "white", "black" };
+        ViewBag.SortOptions = new Dictionary<string, string>
+        {
+            ["CreatedAt"] = "Date",
+            ["Rating"] = "Rating",
+            ["Opponent"] = "Opponent",
+            ["Opening"] = "Opening",
+            ["Moves"] = "Game Length"
+        };
+
+        return View(model);
+    }
+
+    // Otherwise, process as a search request
+    var request = new LichessGameSearchRequest
+    {
+        Username = username,
+        Opponent = opponent,
+        Opening = opening,
+        EcoCode = ecoCode,
+        Result = result,
+        Color = color,
+        PerfTypes = perfTypes,
+        FromDate = fromDate,
+        ToDate = toDate,
+        MinRating = minRating,
+        MaxRating = maxRating,
+        RatedOnly = ratedOnly,
+        AnalyzedOnly = analyzedOnly,
+        Status = status,
+        MinMoves = minMoves,
+        MaxMoves = maxMoves,
+        SortBy = sortBy ?? "CreatedAt",
+        SortDirection = sortDirection ?? "desc",
+        Page = page,
+        PageSize = pageSize
+    };
+
+    var (games, totalCount) = await _importService.SearchGamesAsync(request);
+
+    ViewBag.PerfTypes = new List<string> { "bullet", "blitz", "rapid", "classical", "correspondence" };
+    ViewBag.Results = new List<string> { "win", "loss", "draw" };
+    ViewBag.Colors = new List<string> { "white", "black" };
+    ViewBag.SortOptions = new Dictionary<string, string>
+    {
+        ["CreatedAt"] = "Date",
+        ["Rating"] = "Rating", 
+        ["Opponent"] = "Opponent",
+        ["Opening"] = "Opening",
+        ["Moves"] = "Game Length"
+    };
+
+    ViewBag.TotalCount = totalCount;
+    ViewBag.TotalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
+    ViewBag.SearchRequest = request;
+
+    return View("SearchResults", games);
+}
 
         [HttpPost]
         public async Task<IActionResult> Search(LichessGameSearchRequest request)
