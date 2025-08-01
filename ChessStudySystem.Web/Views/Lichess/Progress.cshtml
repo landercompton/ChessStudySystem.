@@ -1,0 +1,452 @@
+﻿@model ChessStudySystem.Web.Models.Lichess.ImportSession
+@{
+    ViewData["Title"] = "Import Progress";
+}
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0">
+                        <i class="fas fa-download me-2"></i>
+                        Import Progress - @Model.Username
+                    </h3>
+                </div>
+
+                <div class="card-body">
+                    <!-- Status Alert -->
+                    <div id="statusAlert" class="alert" role="alert">
+                        <div class="d-flex align-items-center">
+                            <div id="statusIcon" class="me-3">
+                                <i class="fas fa-spinner fa-spin fa-2x text-primary"></i>
+                            </div>
+                            <div>
+                                <h5 id="statusTitle" class="alert-heading mb-1">Import in Progress</h5>
+                                <p id="statusMessage" class="mb-0">
+                                    Fetching games from Lichess...
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-bold">Progress</span>
+                            <span id="progressText">0%</span>
+                        </div>
+                        <div class="progress" style="height: 20px;">
+                            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                                 role="progressbar" style="width: 0%">
+                                <span id="progressLabel">0%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Statistics -->
+                    <div class="row text-center mb-4">
+                        <div class="col-6 col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body py-3">
+                                    <h5 class="card-title text-info" id="processedCount">@Model.GamesProcessed</h5>
+                                    <p class="card-text small text-muted mb-0">Processed</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body py-3">
+                                    <h5 class="card-title text-success" id="importedCount">@Model.GamesImported</h5>
+                                    <p class="card-text small text-muted mb-0">Imported</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body py-3">
+                                    <h5 class="card-title text-warning" id="skippedCount">@Model.GamesSkipped</h5>
+                                    <p class="card-text small text-muted mb-0">Skipped</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="card bg-light">
+                                <div class="card-body py-3">
+                                    <h5 class="card-title text-danger" id="errorCount">@Model.GamesErrored</h5>
+                                    <p class="card-text small text-muted mb-0">Errors</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Import Details -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">
+                                        <i class="fas fa-info-circle me-2"></i>Import Details
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <table class="table table-sm table-borderless">
+                                        <tr>
+                                            <td><strong>Username:</strong></td>
+                                            <td>@Model.Username</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Started:</strong></td>
+                                            <td>@Model.StartedAt.ToString("MMM dd, yyyy HH:mm:ss")</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Duration:</strong></td>
+                                            <td id="duration">@(Model.Duration?.ToString(@"mm\:ss") ?? "00:00")</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Status:</strong></td>
+                                            <td>
+                                                <span id="currentStatus" class="badge bg-primary">@Model.Status</span>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">
+                                        <i class="fas fa-filter me-2"></i>Filters Applied
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="filtersDisplay">
+                                        @if (Model.FiltersUsed.Any())
+                                        {
+                                            @foreach (var filter in Model.FiltersUsed)
+                                            {
+                                                <span class="badge bg-secondary me-1 mb-1">
+                                                    @filter.Key: @filter.Value
+                                                </span>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">No filters applied</span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Error Messages -->
+                    <div id="errorMessages" class="mt-3" style="display: none;">
+                        <div class="card border-danger">
+                            <div class="card-header bg-danger text-white">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>Error Details
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="errorList"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="card-footer">
+                    <div class="row">
+                        <div class="col">
+                            <div id="actionButtons">
+                                <!-- Running state buttons -->
+                                <div id="runningButtons" class="@(Model.IsCompleted ? "d-none" : "")">
+                                    <form asp-action="CancelImport" method="post" class="d-inline">
+                                        <input type="hidden" name="sessionId" value="@ViewBag.SessionId" />
+                                        <button type="submit" class="btn btn-outline-danger"
+                                                onclick="return confirm('Are you sure you want to cancel this import?')">
+                                            <i class="fas fa-times me-2"></i>Cancel Import
+                                        </button>
+                                    </form>
+                                </div>
+
+                                <!-- Completed state buttons -->
+                                <div id="completedButtons" class="@(!Model.IsCompleted ? "d-none" : "")">
+                                    <a href="@Url.Action("Games", new { username = Model.Username })"
+                                       class="btn btn-primary">
+                                        <i class="fas fa-chess me-2"></i>View Imported Games
+                                    </a>
+                                    <a href="@Url.Action("Statistics", new { username = Model.Username })"
+                                       class="btn btn-outline-info">
+                                        <i class="fas fa-chart-bar me-2"></i>Statistics
+                                    </a>
+                                    <a href="@Url.Action("Import")"
+                                       class="btn btn-outline-secondary">
+                                        <i class="fas fa-plus me-2"></i>New Import
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions Card -->
+            <div class="card mt-3">
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-4">
+                            <a href="@Url.Action("History", new { username = Model.Username })"
+                               class="text-decoration-none">
+                                <i class="fas fa-history fa-2x text-muted mb-2 d-block"></i>
+                                <small class="text-muted">Import History</small>
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="@Url.Action("Search", new { username = Model.Username })"
+                               class="text-decoration-none">
+                                <i class="fas fa-search fa-2x text-muted mb-2 d-block"></i>
+                                <small class="text-muted">Search Games</small>
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="https://lichess.org/@@(@Model.Username)"
+                               target="_blank" class="text-decoration-none">
+                                <i class="fas fa-external-link-alt fa-2x text-muted mb-2 d-block"></i>
+                                <small class="text-muted">Lichess Profile</small>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const sessionId = @ViewBag.SessionId;
+        let isCompleted = @Model.IsCompleted.ToString().ToLowerInvariant();
+        let pollInterval;
+
+        // DOM elements
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const progressLabel = document.getElementById('progressLabel');
+        const statusAlert = document.getElementById('statusAlert');
+        const statusIcon = document.getElementById('statusIcon');
+        const statusTitle = document.getElementById('statusTitle');
+        const statusMessage = document.getElementById('statusMessage');
+        const currentStatus = document.getElementById('currentStatus');
+        const duration = document.getElementById('duration');
+        const processedCount = document.getElementById('processedCount');
+        const importedCount = document.getElementById('importedCount');
+        const skippedCount = document.getElementById('skippedCount');
+        const errorCount = document.getElementById('errorCount');
+        const errorMessages = document.getElementById('errorMessages');
+        const errorList = document.getElementById('errorList');
+        const runningButtons = document.getElementById('runningButtons');
+        const completedButtons = document.getElementById('completedButtons');
+
+        // Start polling if not completed
+        if (!isCompleted) {
+            startPolling();
+        } else {
+            updateUIForCompletedState('@Model.Status');
+        }
+
+        function startPolling() {
+            // Poll every 2 seconds
+            pollInterval = setInterval(checkProgress, 2000);
+
+            // Initial check
+            checkProgress();
+        }
+
+        function stopPolling() {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+        }
+
+        async function checkProgress() {
+            try {
+                const response = await fetch(`/Lichess/GetProgressStatus?sessionId=${sessionId}`);
+                const data = await response.json();
+
+                if (data.error) {
+                    console.error('Error fetching progress:', data.error);
+                    return;
+                }
+
+                updateProgress(data);
+
+                // Stop polling if completed
+                if (data.isCompleted) {
+                    isCompleted = true;
+                    stopPolling();
+                    updateUIForCompletedState(data.status);
+                }
+            } catch (error) {
+                console.error('Error checking progress:', error);
+            }
+        }
+
+        function updateProgress(data) {
+            // Update progress bar
+            const progress = Math.round(data.progress || 0);
+            progressBar.style.width = `${progress}%`;
+            progressBar.setAttribute('aria-valuenow', progress);
+            progressText.textContent = `${progress}%`;
+            progressLabel.textContent = `${progress}%`;
+
+            // Update counts
+            processedCount.textContent = (data.processed || 0).toLocaleString();
+            importedCount.textContent = (data.imported || 0).toLocaleString();
+            skippedCount.textContent = (data.skipped || 0).toLocaleString();
+            errorCount.textContent = (data.errors || 0).toLocaleString();
+
+            // Update duration
+            if (data.duration) {
+                duration.textContent = data.duration;
+            }
+
+            // Update status
+            currentStatus.textContent = data.status;
+            currentStatus.className = getStatusBadgeClass(data.status);
+
+            // Update status message
+            updateStatusMessage(data);
+
+            // Show errors if any
+            if (data.errors > 0 && data.errorMessage) {
+                showError(data.errorMessage);
+            }
+        }
+
+        function updateStatusMessage(data) {
+            const status = data.status.toLowerCase();
+
+            switch (status) {
+                case 'running':
+                    statusMessage.innerHTML = `
+                        Processing games...
+                        ${data.processed ? `${data.processed.toLocaleString()} processed` : ''}
+                        ${data.totalFound > 0 ? ` of ${data.totalFound.toLocaleString()} found` : ''}
+                    `;
+                    break;
+                case 'completed':
+                    statusMessage.innerHTML = `
+                        Import completed successfully!
+                        ${data.imported.toLocaleString()} games imported
+                        ${data.skipped > 0 ? `, ${data.skipped.toLocaleString()} skipped` : ''}
+                        ${data.errors > 0 ? `, ${data.errors.toLocaleString()} errors` : ''}
+                    `;
+                    break;
+                case 'failed':
+                    statusMessage.innerHTML = `Import failed: ${data.errorMessage || 'Unknown error'}`;
+                    break;
+                case 'cancelled':
+                    statusMessage.innerHTML = 'Import was cancelled by user';
+                    break;
+                default:
+                    statusMessage.innerHTML = `Status: ${data.status}`;
+            }
+        }
+
+        function updateUIForCompletedState(status) {
+            const statusLower = status.toLowerCase();
+
+            // Update status alert
+            statusAlert.className = `alert ${getStatusAlertClass(statusLower)}`;
+
+            // Update icon
+            statusIcon.innerHTML = getStatusIcon(statusLower);
+
+            // Update title
+            statusTitle.textContent = getStatusTitle(statusLower);
+
+            // Stop progress bar animation
+            progressBar.classList.remove('progress-bar-animated');
+
+            // Show/hide action buttons
+            runningButtons.classList.add('d-none');
+            completedButtons.classList.remove('d-none');
+
+            // Auto-redirect to games view if successful (after 3 seconds)
+            if (statusLower === 'completed') {
+                setTimeout(() => {
+                    const viewGamesBtn = completedButtons.querySelector('a[href*="Games"]');
+                    if (viewGamesBtn && confirm('Import completed! Would you like to view your imported games?')) {
+                        window.location.href = viewGamesBtn.href;
+                    }
+                }, 3000);
+            }
+        }
+
+        function showError(errorMessage) {
+            errorList.innerHTML = `<div class="alert alert-danger mb-0">${errorMessage}</div>`;
+            errorMessages.style.display = 'block';
+        }
+
+        function getStatusBadgeClass(status) {
+            switch (status.toLowerCase()) {
+                case 'running': return 'badge bg-primary';
+                case 'completed': return 'badge bg-success';
+                case 'failed': return 'badge bg-danger';
+                case 'cancelled': return 'badge bg-warning';
+                default: return 'badge bg-secondary';
+            }
+        }
+
+        function getStatusAlertClass(status) {
+            switch (status) {
+                case 'running': return 'alert-info';
+                case 'completed': return 'alert-success';
+                case 'failed': return 'alert-danger';
+                case 'cancelled': return 'alert-warning';
+                default: return 'alert-secondary';
+            }
+        }
+
+        function getStatusIcon(status) {
+            switch (status) {
+                case 'running': return '<i class="fas fa-spinner fa-spin fa-2x text-info"></i>';
+                case 'completed': return '<i class="fas fa-check-circle fa-2x text-success"></i>';
+                case 'failed': return '<i class="fas fa-times-circle fa-2x text-danger"></i>';
+                case 'cancelled': return '<i class="fas fa-ban fa-2x text-warning"></i>';
+                default: return '<i class="fas fa-question-circle fa-2x text-secondary"></i>';
+            }
+        }
+
+        function getStatusTitle(status) {
+            switch (status) {
+                case 'running': return 'Import in Progress';
+                case 'completed': return 'Import Completed Successfully';
+                case 'failed': return 'Import Failed';
+                case 'cancelled': return 'Import Cancelled';
+                default: return 'Import Status Unknown';
+            }
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            stopPolling();
+        });
+
+        // Handle visibility change (pause polling when tab is hidden)
+        document.addEventListener('visibilitychange', function() {
+            if (!isCompleted) {
+                if (document.hidden) {
+                    stopPolling();
+                } else {
+                    startPolling();
+                }
+            }
+        });
+    });
+</script>

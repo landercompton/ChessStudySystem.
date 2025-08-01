@@ -1,0 +1,286 @@
+﻿@model ChessStudySystem.Web.Models.Lichess.LichessGameSearchRequest
+@{
+    ViewData["Title"] = "Search Lichess Games";
+}
+
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-success text-white">
+                    <h3 class="mb-0">
+                        <i class="fas fa-search me-2"></i>Search Imported Games
+                    </h3>
+                </div>
+
+                <div class="card-body">
+                    <form asp-action="Search" method="post" id="searchForm">
+                        <div class="row">
+                            <!-- Left Column -->
+                            <div class="col-md-6">
+                                <h5 class="text-success mb-3">
+                                    <i class="fas fa-filter me-2"></i>Basic Filters
+                                </h5>
+
+                                <!-- Username -->
+                                <div class="mb-3">
+                                    <label asp-for="Username" class="form-label fw-bold">Username</label>
+                                    <input asp-for="Username" class="form-control" placeholder="Enter username..." />
+                                </div>
+
+                                <!-- Opponent -->
+                                <div class="mb-3">
+                                    <label asp-for="Opponent" class="form-label fw-bold">Opponent</label>
+                                    <input asp-for="Opponent" class="form-control" placeholder="Opponent's username..." />
+                                </div>
+
+                                <!-- Opening -->
+                                <div class="mb-3">
+                                    <label asp-for="Opening" class="form-label fw-bold">Opening Name</label>
+                                    <input asp-for="Opening" class="form-control" placeholder="Search opening names..." />
+                                </div>
+
+                                <!-- ECO Code -->
+                                <div class="mb-3">
+                                    <label asp-for="EcoCode" class="form-label fw-bold">ECO Code</label>
+                                    <input asp-for="EcoCode" class="form-control" placeholder="e.g., E20, B01..." />
+                                </div>
+
+                                <!-- Result and Color -->
+                                <div class="row">
+                                    <div class="col-sm-6 mb-3">
+                                        <label asp-for="Result" class="form-label fw-bold">Result</label>
+                                        <select asp-for="Result" class="form-select">
+                                            <option value="">Any result</option>
+                                            @foreach (var result in ViewBag.Results as List<string>)
+                                            {
+                                                <option value="@result">@result.Substring(0, 1).ToUpper()@result.Substring(1)</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    <div class="col-sm-6 mb-3">
+                                        <label asp-for="Color" class="form-label fw-bold">Color</label>
+                                        <select asp-for="Color" class="form-select">
+                                            <option value="">Both colors</option>
+                                            @foreach (var color in ViewBag.Colors as List<string>)
+                                            {
+                                                <option value="@color">@color.Substring(0, 1).ToUpper()@color.Substring(1)</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Time Controls -->
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Time Controls</label>
+                                    <div class="row">
+                                        @foreach (var perfType in ViewBag.PerfTypes as List<string>)
+                                        {
+                                            <div class="col-sm-6">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox"
+                                                           name="PerfTypes" value="@perfType"
+                                                           id="search_@perfType"
+                                                           checked="@(Model.PerfTypes.Contains(perfType))" />
+                                                    <label class="form-check-label" for="search_@perfType">
+                                                        @perfType.Substring(0, 1).ToUpper()@perfType.Substring(1)
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right Column -->
+                            <div class="col-md-6">
+                                <h5 class="text-success mb-3">
+                                    <i class="fas fa-sliders-h me-2"></i>Advanced Filters
+                                </h5>
+
+                                <!-- Date Range -->
+                                <div class="row">
+                                    <div class="col-sm-6 mb-3">
+                                        <label asp-for="FromDate" class="form-label fw-bold">From Date</label>
+                                        <input asp-for="FromDate" class="form-control" type="date" />
+                                    </div>
+                                    <div class="col-sm-6 mb-3">
+                                        <label asp-for="ToDate" class="form-label fw-bold">To Date</label>
+                                        <input asp-for="ToDate" class="form-control" type="date" />
+                                    </div>
+                                </div>
+
+                                <!-- Rating Range -->
+                                <div class="row">
+                                    <div class="col-sm-6 mb-3">
+                                        <label asp-for="MinRating" class="form-label fw-bold">Min Rating</label>
+                                        <input asp-for="MinRating" class="form-control" type="number"
+                                               min="500" max="3000" placeholder="e.g., 1500" />
+                                    </div>
+                                    <div class="col-sm-6 mb-3">
+                                        <label asp-for="MaxRating" class="form-label fw-bold">Max Rating</label>
+                                        <input asp-for="MaxRating" class="form-control" type="number"
+                                               min="500" max="3000" placeholder="e.g., 2000" />
+                                    </div>
+                                </div>
+
+                                <!-- Game Length -->
+                                <div class="row">
+                                    <div class="col-sm-6 mb-3">
+                                        <label asp-for="MinMoves" class="form-label fw-bold">Min Moves</label>
+                                        <input asp-for="MinMoves" class="form-control" type="number"
+                                               min="1" placeholder="e.g., 20" />
+                                    </div>
+                                    <div class="col-sm-6 mb-3">
+                                        <label asp-for="MaxMoves" class="form-label fw-bold">Max Moves</label>
+                                        <input asp-for="MaxMoves" class="form-control" type="number"
+                                               min="1" placeholder="e.g., 100" />
+                                    </div>
+                                </div>
+
+                                <!-- Additional Filters -->
+                                <div class="mb-3">
+                                    <label asp-for="RatedOnly" class="form-label fw-bold">Game Type</label>
+                                    <select asp-for="RatedOnly" class="form-select">
+                                        <option value="">Both rated and casual</option>
+                                        <option value="true">Rated games only</option>
+                                        <option value="false">Casual games only</option>
+                                    </select>
+                                </div>
+
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input asp-for="AnalyzedOnly" class="form-check-input" />
+                                        <label asp-for="AnalyzedOnly" class="form-check-label fw-bold">
+                                            Only analyzed games
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Sorting -->
+                                <div class="row">
+                                    <div class="col-sm-6 mb-3">
+                                        <label asp-for="SortBy" class="form-label fw-bold">Sort By</label>
+                                        <select asp-for="SortBy" class="form-select">
+                                            @foreach (var sort in ViewBag.SortOptions as Dictionary<string, string>)
+                                            {
+                                                <option value="@sort.Key">@sort.Value</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    <div class="col-sm-6 mb-3">
+                                        <label asp-for="SortDirection" class="form-label fw-bold">Direction</label>
+                                        <select asp-for="SortDirection" class="form-select">
+                                            <option value="desc">Newest first</option>
+                                            <option value="asc">Oldest first</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Results Per Page -->
+                                <div class="mb-3">
+                                    <label asp-for="PageSize" class="form-label fw-bold">Results Per Page</label>
+                                    <select asp-for="PageSize" class="form-select">
+                                        <option value="25">25</option>
+                                        <option value="50" selected>50</option>
+                                        <option value="100">100</option>
+                                        <option value="200">200</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Search Button -->
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-success btn-lg">
+                                        <i class="fas fa-search me-2"></i>Search Games
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Quick Filters -->
+                <div class="card-footer">
+                    <div class="row">
+                        <div class="col-12">
+                            <h6 class="text-muted mb-2">Quick Filters:</h6>
+                            <button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="setQuickFilter('wins')">
+                                <i class="fas fa-trophy me-1"></i>My Wins
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="setQuickFilter('blitz')">
+                                <i class="fas fa-bolt me-1"></i>Blitz Games
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="setQuickFilter('recent')">
+                                <i class="fas fa-calendar me-1"></i>Last 30 Days
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="setQuickFilter('analyzed')">
+                                <i class="fas fa-microscope me-1"></i>Analyzed
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="setQuickFilter('long')">
+                                <i class="fas fa-clock me-1"></i>Long Games (50+ moves)
+                            </button>
+                            <button type="button" class="btn btn-outline-warning btn-sm" onclick="clearFilters()">
+                                <i class="fas fa-eraser me-1"></i>Clear All
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Auto-focus username field if empty
+        const usernameField = document.getElementById('Username');
+        if (usernameField && !usernameField.value) {
+            usernameField.focus();
+        }
+    });
+
+    function setQuickFilter(type) {
+        clearFilters();
+
+        switch (type) {
+            case 'wins':
+                document.getElementById('Result').value = 'win';
+                break;
+            case 'blitz':
+                document.querySelector('input[value="blitz"]').checked = true;
+                break;
+            case 'recent':
+                const thirtyDaysAgo = new Date();
+                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                document.getElementById('FromDate').value = thirtyDaysAgo.toISOString().split('T')[0];
+                break;
+            case 'analyzed':
+                document.getElementById('AnalyzedOnly').checked = true;
+                break;
+            case 'long':
+                document.getElementById('MinMoves').value = '50';
+                break;
+        }
+    }
+
+    function clearFilters() {
+        // Clear all form fields except username
+        const form = document.getElementById('searchForm');
+        const username = document.getElementById('Username').value;
+
+        form.reset();
+
+        // Restore username
+        document.getElementById('Username').value = username;
+
+        // Reset checkboxes
+        document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+
+        // Reset selects to first option
+        document.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+    }
+</script>

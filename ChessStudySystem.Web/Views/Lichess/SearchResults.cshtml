@@ -1,0 +1,392 @@
+﻿@model List<ChessStudySystem.Web.Models.Lichess.LichessGame>
+@{
+    ViewData["Title"] = "Search Results";
+    var searchRequest = ViewBag.SearchRequest as ChessStudySystem.Web.Models.Lichess.LichessGameSearchRequest;
+    var totalCount = ViewBag.TotalCount as int? ?? 0;
+    var totalPages = ViewBag.TotalPages as int? ?? 0;
+}
+
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <!-- Results Header -->
+            <div class="card shadow">
+                <div class="card-header bg-success text-white">
+                    <div class="row align-items-center">
+                        <div class="col-md-8">
+                            <h4 class="mb-0">
+                                <i class="fas fa-search-plus me-2"></i>
+                                Search Results
+                                <span class="badge bg-light text-dark ms-2">@totalCount.ToString("N0") games</span>
+                            </h4>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <div class="btn-group">
+                                <a href="@Url.Action("Search", "Lichess", new { 
+                                    username = searchRequest?.Username, 
+                                    opponent = searchRequest?.Opponent, 
+                                    opening = searchRequest?.Opening, 
+                                    ecoCode = searchRequest?.EcoCode, 
+                                    result = searchRequest?.Result, 
+                                    color = searchRequest?.Color, 
+                                    perfTypes = searchRequest?.PerfTypes, 
+                                    fromDate = searchRequest?.FromDate?.ToString("yyyy-MM-dd"), 
+                                    toDate = searchRequest?.ToDate?.ToString("yyyy-MM-dd"), 
+                                    minRating = searchRequest?.MinRating, 
+                                    maxRating = searchRequest?.MaxRating, 
+                                    ratedOnly = searchRequest?.RatedOnly, 
+                                    analyzedOnly = searchRequest?.AnalyzedOnly, 
+                                    status = searchRequest?.Status, 
+                                    minMoves = searchRequest?.MinMoves, 
+                                    maxMoves = searchRequest?.MaxMoves,
+                                    sortBy = searchRequest?.SortBy,
+                                    sortDirection = searchRequest?.SortDirection,
+                                    pageSize = searchRequest?.PageSize
+                                })" class="btn btn-outline-light btn-sm">
+                                    <i class="fas fa-edit me-1"></i>Modify Search
+                                </a>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-outline-light btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+                                        <i class="fas fa-download me-1"></i>Export
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li><a class="dropdown-item" href="@Url.Action("Export", "Lichess", new { 
+                                            username = searchRequest?.Username, 
+                                            opponent = searchRequest?.Opponent, 
+                                            opening = searchRequest?.Opening, 
+                                            ecoCode = searchRequest?.EcoCode, 
+                                            result = searchRequest?.Result, 
+                                            color = searchRequest?.Color, 
+                                            perfTypes = searchRequest?.PerfTypes, 
+                                            fromDate = searchRequest?.FromDate?.ToString("yyyy-MM-dd"), 
+                                            toDate = searchRequest?.ToDate?.ToString("yyyy-MM-dd"), 
+                                            minRating = searchRequest?.MinRating, 
+                                            maxRating = searchRequest?.MaxRating, 
+                                            ratedOnly = searchRequest?.RatedOnly, 
+                                            analyzedOnly = searchRequest?.AnalyzedOnly, 
+                                            status = searchRequest?.Status, 
+                                            minMoves = searchRequest?.MinMoves, 
+                                            maxMoves = searchRequest?.MaxMoves,
+                                            format = "pgn" 
+                                        })">
+                                            <i class="fas fa-file-code me-2"></i>PGN Format
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="@Url.Action("Export", "Lichess", new { 
+                                            username = searchRequest?.Username, 
+                                            opponent = searchRequest?.Opponent, 
+                                            opening = searchRequest?.Opening, 
+                                            ecoCode = searchRequest?.EcoCode, 
+                                            result = searchRequest?.Result, 
+                                            color = searchRequest?.Color, 
+                                            perfTypes = searchRequest?.PerfTypes, 
+                                            fromDate = searchRequest?.FromDate?.ToString("yyyy-MM-dd"), 
+                                            toDate = searchRequest?.ToDate?.ToString("yyyy-MM-dd"), 
+                                            minRating = searchRequest?.MinRating, 
+                                            maxRating = searchRequest?.MaxRating, 
+                                            ratedOnly = searchRequest?.RatedOnly, 
+                                            analyzedOnly = searchRequest?.AnalyzedOnly, 
+                                            status = searchRequest?.Status, 
+                                            minMoves = searchRequest?.MinMoves, 
+                                            maxMoves = searchRequest?.MaxMoves,
+                                            format = "csv" 
+                                        })">
+                                            <i class="fas fa-file-csv me-2"></i>CSV Format
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="@Url.Action("Export", "Lichess", new { 
+                                            username = searchRequest?.Username, 
+                                            opponent = searchRequest?.Opponent, 
+                                            opening = searchRequest?.Opening, 
+                                            ecoCode = searchRequest?.EcoCode, 
+                                            result = searchRequest?.Result, 
+                                            color = searchRequest?.Color, 
+                                            perfTypes = searchRequest?.PerfTypes, 
+                                            fromDate = searchRequest?.FromDate?.ToString("yyyy-MM-dd"), 
+                                            toDate = searchRequest?.ToDate?.ToString("yyyy-MM-dd"), 
+                                            minRating = searchRequest?.MinRating, 
+                                            maxRating = searchRequest?.MaxRating, 
+                                            ratedOnly = searchRequest?.RatedOnly, 
+                                            analyzedOnly = searchRequest?.AnalyzedOnly, 
+                                            status = searchRequest?.Status, 
+                                            minMoves = searchRequest?.MinMoves, 
+                                            maxMoves = searchRequest?.MaxMoves,
+                                            format = "json" 
+                                        })">
+                                            <i class="fas fa-file-code me-2"></i>JSON Format
+                                        </a></li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body">
+                    @if (Model?.Any() == true)
+                    {
+                        <!-- Games Table -->
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Opponent</th>
+                                        <th>Result</th>
+                                        <th>Color</th>
+                                        <th>Rating</th>
+                                        <th>Time Control</th>
+                                        <th>Opening</th>
+                                        <th>Moves</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var game in Model)
+                                    {
+                                        <tr class="@GetRowClass(game.UserResult)">
+                                            <td>
+                                                <div class="d-flex flex-column">
+                                                    <span class="fw-bold">@game.CreatedAt.ToString("MMM dd")</span>
+                                                    <small class="text-muted">@game.CreatedAt.ToString("HH:mm")</small>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="d-flex align-items-center">
+                                                    @if (!string.IsNullOrEmpty(game.OpponentTitle))
+                                                    {
+                                                        <span class="badge bg-warning text-dark me-2">@game.OpponentTitle</span>
+                                                    }
+                                                    <span class="fw-bold">@game.OpponentUsername</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="badge @GetResultBadgeClass(game.UserResult)">
+                                                    @GetResultDisplay(game.UserResult)
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="badge @(game.UserColor == "white" ? "bg-light text-dark" : "bg-dark text-white")">
+                                                    <i class="fas fa-chess-@(game.UserColor == "white" ? "king" : "king") me-1"></i>
+                                                    @game.UserColor?.Substring(0, 1).ToUpper()@game.UserColor?.Substring(1)
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <div class="d-flex flex-column">
+                                                    <span class="fw-bold">@game.UserRating</span>
+                                                    @if (game.UserRatingDiff.HasValue)
+                                                    {
+                                                        <small class="@(game.UserRatingDiff > 0 ? "text-success" : game.UserRatingDiff < 0 ? "text-danger" : "text-muted")">
+                                                            @(game.UserRatingDiff > 0 ? "+" : "")@game.UserRatingDiff
+                                                        </small>
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-info">@game.PerfType</span>
+                                                @if (!string.IsNullOrEmpty(game.TimeControl))
+                                                {
+                                                    <br><small class="text-muted">@game.TimeControl</small>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (!string.IsNullOrEmpty(game.OpeningName))
+                                                {
+                                                    <div class="d-flex flex-column">
+                                                        @if (!string.IsNullOrEmpty(game.OpeningEco))
+                                                        {
+                                                            <span class="badge bg-secondary mb-1">@game.OpeningEco</span>
+                                                        }
+                                                        <small class="text-truncate" style="max-width: 200px;" title="@game.OpeningName">
+                                                            @game.OpeningName
+                                                        </small>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">Unknown</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <span class="fw-bold">@game.MovesCount</span>
+                                                <br><small class="text-muted">moves</small>
+                                            </td>
+                                            <td>
+                                                <div class="btn-group-vertical btn-group-sm">
+                                                    <a href="https://lichess.org/@game.LichessId" 
+                                                       target="_blank" 
+                                                       class="btn btn-outline-primary btn-sm"
+                                                       title="View on Lichess">
+                                                        <i class="fas fa-external-link-alt"></i>
+                                                    </a>
+                                                    @if (game.HasAnalysis)
+                                                    {
+                                                        <a href="https://lichess.org/@game.LichessId/analysis" 
+                                                           target="_blank" 
+                                                           class="btn btn-outline-info btn-sm"
+                                                           title="View Analysis">
+                                                            <i class="fas fa-microscope"></i>
+                                                        </a>
+                                                    }
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        @if (totalPages > 1)
+                        {
+                            <nav aria-label="Search results pagination" class="mt-4">
+                                <ul class="pagination justify-content-center">
+                                    <!-- Previous -->
+                                    <li class="page-item @(searchRequest.Page == 1 ? "disabled" : "")">
+                                        <a class="page-link" href="@Url.Action("Search", new { username = searchRequest?.Username, opponent = searchRequest?.Opponent, opening = searchRequest?.Opening, ecoCode = searchRequest?.EcoCode, result = searchRequest?.Result, color = searchRequest?.Color, fromDate = searchRequest?.FromDate, toDate = searchRequest?.ToDate, minRating = searchRequest?.MinRating, maxRating = searchRequest?.MaxRating, ratedOnly = searchRequest?.RatedOnly, analyzedOnly = searchRequest?.AnalyzedOnly, status = searchRequest?.Status, minMoves = searchRequest?.MinMoves, maxMoves = searchRequest?.MaxMoves, page = searchRequest.Page - 1 })">
+                                            <i class="fas fa-chevron-left"></i> Previous
+                                        </a>
+                                    </li>
+
+                                    <!-- Page numbers -->
+                                    @{
+                                        var startPage = Math.Max(1, searchRequest.Page - 2);
+                                        var endPage = Math.Min(totalPages, searchRequest.Page + 2);
+                                    }
+
+                                    @if (startPage > 1)
+                                    {
+                                        <li class="page-item">
+                                            <a class="page-link" href="@Url.Action("Search", new { username = searchRequest?.Username, opponent = searchRequest?.Opponent, opening = searchRequest?.Opening, ecoCode = searchRequest?.EcoCode, result = searchRequest?.Result, color = searchRequest?.Color, fromDate = searchRequest?.FromDate, toDate = searchRequest?.ToDate, minRating = searchRequest?.MinRating, maxRating = searchRequest?.MaxRating, ratedOnly = searchRequest?.RatedOnly, analyzedOnly = searchRequest?.AnalyzedOnly, status = searchRequest?.Status, minMoves = searchRequest?.MinMoves, maxMoves = searchRequest?.MaxMoves, page = 1 })">1</a>
+                                        </li>
+                                        @if (startPage > 2)
+                                        {
+                                            <li class="page-item disabled">
+                                                <span class="page-link">...</span>
+                                            </li>
+                                        }
+                                    }
+
+                                    @for (int i = startPage; i <= endPage; i++)
+                                    {
+                                        <li class="page-item @(i == searchRequest.Page ? "active" : "")">
+                                            <a class="page-link" href="@Url.Action("Search", new { username = searchRequest?.Username, opponent = searchRequest?.Opponent, opening = searchRequest?.Opening, ecoCode = searchRequest?.EcoCode, result = searchRequest?.Result, color = searchRequest?.Color, fromDate = searchRequest?.FromDate, toDate = searchRequest?.ToDate, minRating = searchRequest?.MinRating, maxRating = searchRequest?.MaxRating, ratedOnly = searchRequest?.RatedOnly, analyzedOnly = searchRequest?.AnalyzedOnly, status = searchRequest?.Status, minMoves = searchRequest?.MinMoves, maxMoves = searchRequest?.MaxMoves, page = i })">@i</a>
+                                        </li>
+                                    }
+
+                                    @if (endPage < totalPages)
+                                    {
+                                        @if (endPage < totalPages - 1)
+                                        {
+                                            <li class="page-item disabled">
+                                                <span class="page-link">...</span>
+                                            </li>
+                                        }
+                                        <li class="page-item">
+                                            <a class="page-link" href="@Url.Action("Search", new { username = searchRequest?.Username, opponent = searchRequest?.Opponent, opening = searchRequest?.Opening, ecoCode = searchRequest?.EcoCode, result = searchRequest?.Result, color = searchRequest?.Color, fromDate = searchRequest?.FromDate, toDate = searchRequest?.ToDate, minRating = searchRequest?.MinRating, maxRating = searchRequest?.MaxRating, ratedOnly = searchRequest?.RatedOnly, analyzedOnly = searchRequest?.AnalyzedOnly, status = searchRequest?.Status, minMoves = searchRequest?.MinMoves, maxMoves = searchRequest?.MaxMoves, page = totalPages })">@totalPages</a>
+                                        </li>
+                                    }
+
+                                    <!-- Next -->
+                                    <li class="page-item @(searchRequest.Page == totalPages ? "disabled" : "")">
+                                        <a class="page-link" href="@Url.Action("Search", new { username = searchRequest?.Username, opponent = searchRequest?.Opponent, opening = searchRequest?.Opening, ecoCode = searchRequest?.EcoCode, result = searchRequest?.Result, color = searchRequest?.Color, fromDate = searchRequest?.FromDate, toDate = searchRequest?.ToDate, minRating = searchRequest?.MinRating, maxRating = searchRequest?.MaxRating, ratedOnly = searchRequest?.RatedOnly, analyzedOnly = searchRequest?.AnalyzedOnly, status = searchRequest?.Status, minMoves = searchRequest?.MinMoves, maxMoves = searchRequest?.MaxMoves, page = searchRequest.Page + 1 })">
+                                            Next <i class="fas fa-chevron-right"></i>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </nav>
+
+                            <!-- Results info -->
+                            <div class="text-center text-muted">
+                                Showing @((searchRequest.Page - 1) * searchRequest.PageSize + 1) to 
+                                @(Math.Min(searchRequest.Page * searchRequest.PageSize, totalCount)) 
+                                of @totalCount.ToString("N0") games
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <!-- No Results -->
+                        <div class="text-center py-5">
+                            <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                            <h4 class="text-muted">No games found</h4>
+                            <p class="text-muted mb-4">
+                                Try adjusting your search criteria or 
+                                <a href="@Url.Action("Import")" class="text-decoration-none">import more games</a>.
+                            </p>
+                            <a href="@Url.Action("Search")" class="btn btn-primary">
+                                <i class="fas fa-search me-2"></i>New Search
+                            </a>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@functions {
+    string GetRowClass(string? result)
+    {
+        return result switch
+        {
+            "win" => "table-success",
+            "loss" => "table-danger",
+            "draw" => "table-warning",
+            _ => ""
+        };
+    }
+
+    string GetResultBadgeClass(string? result)
+    {
+        return result switch
+        {
+            "win" => "bg-success",
+            "loss" => "bg-danger",
+            "draw" => "bg-warning text-dark",
+            _ => "bg-secondary"
+        };
+    }
+
+    string GetResultDisplay(string? result)
+    {
+        return result switch
+        {
+            "win" => "Win",
+            "loss" => "Loss",
+            "draw" => "Draw",
+            _ => "Unknown"
+        };
+    }
+}
+
+<style>
+.table-responsive {
+    border-radius: 0.375rem;
+}
+
+.text-truncate {
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.btn-group-vertical .btn {
+    margin-bottom: 2px;
+}
+
+.btn-group-vertical .btn:last-child {
+    margin-bottom: 0;
+}
+
+.table > tbody > tr.table-success {
+    --bs-table-accent-bg: var(--bs-success-bg-subtle);
+}
+
+.table > tbody > tr.table-danger {
+    --bs-table-accent-bg: var(--bs-danger-bg-subtle);
+}
+
+.table > tbody > tr.table-warning {
+    --bs-table-accent-bg: var(--bs-warning-bg-subtle);
+}
+</style>

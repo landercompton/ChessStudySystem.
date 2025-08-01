@@ -1,0 +1,476 @@
+﻿@model ChessStudySystem.Web.Models.Lichess.LichessImportRequest
+@{
+    ViewData["Title"] = "Import Lichess Games";
+}
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h2 class="mb-0">
+                        <i class="fas fa-download me-2"></i>Import Games from Lichess
+                    </h2>
+                </div>
+
+                <div class="card-body">
+                    @if (ViewData.ModelState.ErrorCount > 0)
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <ul class="mb-0">
+                                @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                                {
+                                    <li>@error.ErrorMessage</li>
+                                }
+                            </ul>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    }
+
+                    <form asp-action="Import" method="post" id="importForm" novalidate>
+                        <div class="row">
+                            <!-- Left Column - Basic Filters -->
+                            <div class="col-md-6">
+                                <h5 class="text-primary mb-3">
+                                    <i class="fas fa-user me-2"></i>Basic Settings
+                                </h5>
+
+                                <!-- Username -->
+                                <div class="mb-3">
+                                    <label asp-for="Username" class="form-label fw-bold">
+                                        Lichess Username <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">
+                                            <i class="fas fa-user"></i>
+                                        </span>
+                                        <input asp-for="Username" class="form-control"
+                                               placeholder="Enter Lichess username..."
+                                               autocomplete="off" />
+                                        <button type="button" class="btn btn-outline-secondary"
+                                                id="validateUserBtn" disabled>
+                                            <i class="fas fa-check"></i> Validate
+                                        </button>
+                                    </div>
+                                    <div id="userValidation" class="mt-2"></div>
+                                    <span asp-validation-for="Username" class="text-danger"></span>
+                                </div>
+
+                                <!-- Max Games -->
+                                <div class="mb-3">
+                                    <label asp-for="MaxGames" class="form-label fw-bold">
+                                        Maximum Games to Import
+                                    </label>
+                                    <input asp-for="MaxGames" class="form-control"
+                                           type="number" min="1" max="10000"
+                                           placeholder="Leave empty for all games" />
+                                    <div class="form-text">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        Leave empty to import all games (may take longer)
+                                    </div>
+                                    <span asp-validation-for="MaxGames" class="text-danger"></span>
+                                </div>
+
+                                <!-- Time Controls -->
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Time Controls</label>
+                                    <div class="row">
+                                        @{
+                                            var timeControls = new Dictionary<string, string>
+                                            {
+                                                ["bullet"] = "Bullet (< 3 min)",
+                                                ["blitz"] = "Blitz (3-8 min)",
+                                                ["rapid"] = "Rapid (8-25 min)",
+                                                ["classical"] = "Classical (> 25 min)",
+                                                ["correspondence"] = "Correspondence"
+                                            };
+                                        }
+                                        @foreach (var tc in timeControls)
+                                        {
+                                            <div class="col-sm-6">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox"
+                                                           name="PerfTypes" value="@tc.Key"
+                                                           id="perf_@tc.Key"
+                                                           checked="@(Model.PerfTypes.Contains(tc.Key))" />
+                                                    <label class="form-check-label" for="perf_@tc.Key">
+                                                        @tc.Value
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                    <div class="form-text">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        Select none to import all time controls
+                                    </div>
+                                </div>
+
+                                <!-- Rating Filter -->
+                                <div class="mb-3">
+                                    <label asp-for="RatedOnly" class="form-label fw-bold">Game Type</label>
+                                    <select asp-for="RatedOnly" class="form-select">
+                                        <option value="">Both rated and casual</option>
+                                        <option value="true">Rated games only</option>
+                                        <option value="false">Casual games only</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Right Column - Advanced Filters -->
+                            <div class="col-md-6">
+                                <h5 class="text-primary mb-3">
+                                    <i class="fas fa-filter me-2"></i>Advanced Filters
+                                </h5>
+
+                                <!-- Date Range -->
+                                <div class="row">
+                                    <div class="col-sm-6 mb-3">
+                                        <label asp-for="Since" class="form-label fw-bold">From Date</label>
+                                        <input asp-for="Since" class="form-control" type="date" />
+                                        <span asp-validation-for="Since" class="text-danger"></span>
+                                    </div>
+                                    <div class="col-sm-6 mb-3">
+                                        <label asp-for="Until" class="form-label fw-bold">To Date</label>
+                                        <input asp-for="Until" class="form-control" type="date" />
+                                        <span asp-validation-for="Until" class="text-danger"></span>
+                                    </div>
+                                </div>
+
+                                <!-- Opponent Filter -->
+                                <div class="mb-3">
+                                    <label asp-for="Opponent" class="form-label fw-bold">
+                                        Specific Opponent
+                                    </label>
+                                    <input asp-for="Opponent" class="form-control"
+                                           placeholder="Enter opponent's username..." />
+                                    <div class="form-text">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        Import only games against this player
+                                    </div>
+                                    <span asp-validation-for="Opponent" class="text-danger"></span>
+                                </div>
+
+                                <!-- Color Filter -->
+                                <div class="mb-3">
+                                    <label asp-for="Color" class="form-label fw-bold">Color Played</label>
+                                    <select asp-for="Color" class="form-select">
+                                        <option value="">Both colors</option>
+                                        <option value="white">White pieces only</option>
+                                        <option value="black">Black pieces only</option>
+                                    </select>
+                                </div>
+
+                                <!-- Analysis Filter -->
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input asp-for="AnalyzedOnly" class="form-check-input" />
+                                        <label asp-for="AnalyzedOnly" class="form-check-label fw-bold">
+                                            Only analyzed games
+                                        </label>
+                                    </div>
+                                    <div class="form-text">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        Include only games with computer analysis
+                                    </div>
+                                </div>
+
+                                <!-- Additional Options -->
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input asp-for="IncludeAnalysis" class="form-check-input" />
+                                        <label asp-for="IncludeAnalysis" class="form-check-label fw-bold">
+                                            Include analysis data
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input asp-for="IncludePgn" class="form-check-input" />
+                                        <label asp-for="IncludePgn" class="form-check-label fw-bold">
+                                            Include PGN notation
+                                        </label>
+                                    </div>
+                                    <div class="form-text">
+                                        <i class="fas fa-warning me-1 text-warning"></i>
+                                        Warning: PGN data significantly increases import time
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Filter Preview -->
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title">
+                                            <i class="fas fa-eye me-2"></i>Import Preview
+                                        </h6>
+                                        <div id="filterPreview" class="text-muted">
+                                            Configure your filters above
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <div class="row mt-4">
+                            <div class="col-12">
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary btn-lg" id="startImportBtn">
+                                        <i class="fas fa-download me-2"></i>Start Import
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="card-footer text-muted">
+                    <div class="row align-items-center">
+                        <div class="col-md-8">
+                            <small>
+                                <i class="fas fa-info-circle me-1"></i>
+                                Only standard chess games will be imported (no variants like Chess960)
+                            </small>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <a href="#" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#helpModal">
+                                <i class="fas fa-question-circle me-1"></i>Help
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Help Modal -->
+<div class="modal fade" id="helpModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Import Help</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="accordion" id="helpAccordion">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#filterHelp">
+                                Understanding Filters
+                            </button>
+                        </h2>
+                        <div id="filterHelp" class="accordion-collapse collapse show" data-bs-parent="#helpAccordion">
+                            <div class="accordion-body">
+                                <ul>
+                                    <li><strong>Time Controls:</strong> Filter by game speed categories</li>
+                                    <li><strong>Date Range:</strong> Import games from specific time periods</li>
+                                    <li><strong>Opponent:</strong> Focus on games against particular players</li>
+                                    <li><strong>Color:</strong> Analyze performance as white or black</li>
+                                    <li><strong>Analysis:</strong> Include computer evaluations for study</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#performanceHelp">
+                                Performance Tips
+                            </button>
+                        </h2>
+                        <div id="performanceHelp" class="accordion-collapse collapse" data-bs-parent="#helpAccordion">
+                            <div class="accordion-body">
+                                <ul>
+                                    <li>Limit max games for faster imports</li>
+                                    <li>Avoid PGN inclusion unless necessary</li>
+                                    <li>Use date ranges to import recent games first</li>
+                                    <li>Monitor progress during import</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const usernameInput = document.getElementById('Username');
+        const validateBtn = document.getElementById('validateUserBtn');
+        const userValidation = document.getElementById('userValidation');
+        const filterPreview = document.getElementById('filterPreview');
+        const importForm = document.getElementById('importForm');
+
+        let userValidated = false;
+        let validationTimeout;
+
+        // Enable validation button when username is entered
+        usernameInput.addEventListener('input', function() {
+            const username = this.value.trim();
+            validateBtn.disabled = username.length < 2;
+            userValidated = false;
+            updateFilterPreview();
+
+            if (username.length >= 2) {
+                clearTimeout(validationTimeout);
+                validationTimeout = setTimeout(() => validateUser(username), 1000);
+            } else {
+                userValidation.innerHTML = '';
+            }
+        });
+
+        // Manual validation
+        validateBtn.addEventListener('click', function() {
+            const username = usernameInput.value.trim();
+            if (username) {
+                validateUser(username);
+            }
+        });
+
+        // Update filter preview on any change
+        document.querySelectorAll('input, select').forEach(element => {
+            element.addEventListener('change', updateFilterPreview);
+            element.addEventListener('input', updateFilterPreview);
+        });
+
+        async function validateUser(username) {
+            validateBtn.disabled = true;
+            validateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+            userValidation.innerHTML = '<div class="text-info"><i class="fas fa-spinner fa-spin me-2"></i>Validating user...</div>';
+
+            try {
+                const response = await fetch(`/Lichess/ValidateUser?username=${encodeURIComponent(username)}`);
+                const result = await response.json();
+
+                if (result.valid) {
+                    userValidated = true;
+                    const user = result.user;
+                    userValidation.innerHTML = `
+                        <div class="alert alert-success mb-0">
+                            <i class="fas fa-check-circle me-2"></i>
+                            <strong>${user.displayName}</strong>
+                            ${user.title ? `<span class="badge bg-warning text-dark ms-2">${user.title}</span>` : ''}
+                            ${user.isOnline ? '<span class="badge bg-success ms-2">Online</span>' : ''}
+                            <br>
+                            <small>
+                                Total games: ${user.totalGames.toLocaleString()} •
+                                Member since: ${user.joinedAt}
+                                ${user.country ? ` • ${user.country}` : ''}
+                            </small>
+                        </div>
+                    `;
+                } else {
+                    userValidated = false;
+                    userValidation.innerHTML = `
+                        <div class="alert alert-danger mb-0">
+                            <i class="fas fa-times-circle me-2"></i>
+                            ${result.message}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                userValidated = false;
+                userValidation.innerHTML = `
+                    <div class="alert alert-warning mb-0">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Unable to validate user. Please check your connection.
+                    </div>
+                `;
+            } finally {
+                validateBtn.disabled = false;
+                validateBtn.innerHTML = '<i class="fas fa-check"></i> Validate';
+            }
+        }
+
+        function updateFilterPreview() {
+            const username = usernameInput.value.trim();
+            const maxGames = document.getElementById('MaxGames').value;
+            const since = document.getElementById('Since').value;
+            const until = document.getElementById('Until').value;
+            const opponent = document.getElementById('Opponent').value;
+            const color = document.getElementById('Color').value;
+            const ratedOnly = document.getElementById('RatedOnly').value;
+            const analyzedOnly = document.getElementById('AnalyzedOnly').checked;
+
+            const perfTypes = Array.from(document.querySelectorAll('input[name="PerfTypes"]:checked'))
+                .map(cb => cb.value);
+
+            let preview = [];
+
+            if (username) {
+                preview.push(`Import games for <strong>${username}</strong>`);
+            } else {
+                preview.push('Enter a username to start');
+            }
+
+            if (maxGames) {
+                preview.push(`Max ${parseInt(maxGames).toLocaleString()} games`);
+            }
+
+            if (perfTypes.length > 0) {
+                preview.push(`Types: ${perfTypes.join(', ')}`);
+            }
+
+            if (opponent) {
+                preview.push(`vs ${opponent}`);
+            }
+
+            if (color) {
+                preview.push(`as ${color}`);
+            }
+
+            if (ratedOnly === 'true') {
+                preview.push('Rated only');
+            } else if (ratedOnly === 'false') {
+                preview.push('Casual only');
+            }
+
+            if (analyzedOnly) {
+                preview.push('Analyzed only');
+            }
+
+            if (since && until) {
+                preview.push(`${since} to ${until}`);
+            } else if (since) {
+                preview.push(`Since ${since}`);
+            } else if (until) {
+                preview.push(`Until ${until}`);
+            }
+
+            filterPreview.innerHTML = preview.join(' • ');
+        }
+
+        // Form submission
+        importForm.addEventListener('submit', function(e) {
+            const username = usernameInput.value.trim();
+
+            if (!username) {
+                e.preventDefault();
+                usernameInput.focus();
+                return false;
+            }
+
+            if (!userValidated) {
+                e.preventDefault();
+                alert('Please validate the username before importing.');
+                return false;
+            }
+
+            // Show loading state
+            const submitBtn = document.getElementById('startImportBtn');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Starting Import...';
+        });
+
+        // Initialize filter preview
+        updateFilterPreview();
+    });
+</script>
