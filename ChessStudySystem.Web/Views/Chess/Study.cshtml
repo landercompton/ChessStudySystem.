@@ -1,20 +1,59 @@
 ﻿@{
     ViewData["Title"] = "Chess Study";
+    var game = ViewBag.Game as ChessStudySystem.Web.Models.Lichess.LichessGame;
 }
 
 <!-- Chess.js with correct CDN and integrity hash -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js" integrity="sha512-xRllwz2gdZciIB+AkEbeq+gVhX8VB8XsfqeFbUh+SzHlN96dEduwtTuVuc2u9EROlmW9+yhRlxjif66ORpsgVA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<!-- Load chess-study.js as a module -->
+<script type="module" src="~/js/chess-study.js"></script>
 
 <!-- SINGLE set of Chessground CSS with CORRECT paths -->
 <link rel="stylesheet" href="~/css/chessground/chessground.base.css" />
 <link rel="stylesheet" href="~/css/chessground/chessground.brown.css" />
 <link rel="stylesheet" href="~/css/chessground/chessground.cburnett.css" />
 
+<!-- Game data from server -->
+<script>
+    const gameData = @Html.Raw(game != null ? 
+        System.Text.Json.JsonSerializer.Serialize(new {
+            lichessId = game.LichessId,
+            pgn = game.Pgn,
+            moves = game.Moves,
+            white = game.WhiteUsername,
+            black = game.BlackUsername,
+            result = game.Winner,
+            opening = game.OpeningName,
+            eco = game.OpeningEco,
+            timeControl = game.TimeControl,
+            createdAt = game.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")
+        }) : "null");
+</script>
+
 <div class="container-fluid">
     <div class="row mb-3">
         <div class="col">
             <h2><i class="fas fa-chess"></i> Chess Study</h2>
-            <p class="text-muted">Analyze chess positions with Lichess engine</p>
+            @if (game != null)
+            {
+                <div class="d-flex flex-wrap gap-3 mb-3">
+                    <span class="badge bg-primary">@game.WhiteUsername vs @game.BlackUsername</span>
+                    @if (!string.IsNullOrEmpty(game.OpeningName))
+                    {
+                        <span class="badge bg-info text-dark">@game.OpeningEco: @game.OpeningName</span>
+                    }
+                    <span class="badge bg-secondary">@game.TimeControl</span>
+                    <span class="badge bg-light text-dark">@game.CreatedAt.ToString("MMM dd, yyyy")</span>
+                    <a href="https://lichess.org/@game.LichessId" target="_blank" class="badge bg-success text-decoration-none">
+                        View on Lichess <i class="fas fa-external-link-alt"></i>
+                    </a>
+                </div>
+            }
+            else
+            {
+                <p class="text-muted">Analyze chess positions with Lichess engine</p>
+            }
         </div>
     </div>
 
@@ -42,190 +81,200 @@
                         </button>
                     </div>
 
+                    <!-- Game Controls (if game is loaded) -->
+                    @if (game != null)
+                    {
+                        <div class="mb-3">
+                            <div class="btn-group w-100" role="group">
+                                <button id="prevMoveBtn" class="btn btn-outline-secondary">
+                                    <i class="fas fa-step-backward"></i>
+                                </button>
+                                <button id="nextMoveBtn" class="btn btn-outline-secondary">
+                                    <i class="fas fa-step-forward"></i>
+                                </button>
+                                <button id="resetBtn" class="btn btn-outline-warning">
+                                    <i class="fas fa-home"></i>
+                                </button>
+                            </div>
+                        </div>
+                    }
+
                     <!-- Evaluation Display -->
                     <div class="mb-3">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <strong>Evaluation:</strong>
-                            <span id="evaluation" class="badge bg-secondary">--</span>
-                        </div>
-                        <div class="evaluation-bar-container">
-                            <div class="evaluation-bar">
-                                <div class="evaluation-indicator" id="evalBar"></div>
+                        <div class="card">
+                            <div class="card-body p-2">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="text-muted">Evaluation:</small>
+                                    <span id="evaluation" class="fw-bold">+0.00</span>
+                                </div>
+                                <div class="progress mt-2" style="height: 10px;">
+                                    <div id="evalBar" class="progress-bar bg-success" style="width: 50%"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
                     <!-- Best Move -->
                     <div class="mb-3">
-                        <strong>Best Move:</strong>
-                        <div id="bestMove" class="text-primary fs-5">--</div>
-                    </div>
-
-                    <!-- Analysis Details -->
-                    <div class="mb-3">
-                        <strong>Depth:</strong>
-                        <span id="depth" class="text-info">--</span>
-                    </div>
-
-                    <div class="mb-3">
-                        <strong>Principal Variation:</strong>
-                        <div id="principalVariation" class="small text-muted">--</div>
-                    </div>
-                    <!-- ADD THIS to your Views/Chess/Study.cshtml file -->
-                    <!-- Put it after your existing Principal Variation section -->
-
-                    <div class="mb-3">
-                        <strong>Enhanced Multi-Line Analysis:</strong>
-                        <div id="enhancedVariationsContainer" class="mt-2">
-                            <div class="text-muted text-center py-3">
-                                <small>Multi-line analysis will appear here after running analysis</small>
+                        <div class="card">
+                            <div class="card-body p-2">
+                                <small class="text-muted">Best Move:</small>
+                                <div id="bestMove" class="fw-bold text-primary">-</div>
                             </div>
                         </div>
                     </div>
 
-
-
-                    <!-- Status -->
-                    <div class="mb-3">
-                        <div id="analysisStatus" class="text-muted">Ready</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Move History -->
-            <div class="card mt-3">
-                <div class="card-header">
-                    <h6><i class="fas fa-list"></i> Move History</h6>
-                </div>
-                <div class="card-body">
-                    <div id="moveHistory" class="move-history">
-                        <div class="text-muted text-center">No moves yet</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Position Info -->
-            <div class="card mt-3">
-                <div class="card-header">
-                    <h6><i class="fas fa-info-circle"></i> Position</h6>
-                </div>
-                <div class="card-body">
-                    <div class="mb-2">
-                        <strong>To Move:</strong>
-                        <span id="toMove" class="badge bg-primary">White</span>
-                    </div>
-                    <div class="mb-2">
-                        <strong>FEN:</strong>
-                        <div id="currentFen" class="small font-monospace text-break">
-                            rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+                    <!-- Move List (if game is loaded) -->
+                    @if (game != null)
+                    {
+                        <div class="card">
+                            <div class="card-header py-2">
+                                <small class="fw-bold">Game Moves</small>
+                            </div>
+                            <div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">
+                                <div id="moveList" class="small"></div>
+                            </div>
                         </div>
-                    </div>
+                    }
                 </div>
             </div>
         </div>
     </div>
-
-    <!-- Add this section to your Study.cshtml, after the existing cards -->
-    <div class="row mt-4">
-        <div class="col-12">
-            <div id="gamesAnalysisContainer">
-                <!-- Games analysis UI will be inserted here by JavaScript -->
-            </div>
-        </div>
-    </div>
-
-    <!-- Include the games analyzer script -->
-    <script src="~/js/lichess-games-analyzer.js"></script>
-
-    <!-- Additional CSS for the games analysis -->
-    <style>
-        .opening-analysis-results .progress {
-            min-width: 60px;
-        }
-
-        .opening-analysis-results .table td {
-            vertical-align: middle;
-        }
-
-        .opening-analysis-results .card {
-            transition: transform 0.2s;
-        }
-
-            .opening-analysis-results .card:hover {
-                transform: translateY(-2px);
-            }
-
-        .input-group .btn {
-            border-color: #198754;
-        }
-
-        .table-responsive {
-            max-height: 600px;
-            overflow-y: auto;
-        }
-
-        .badge {
-            font-size: 0.85em;
-        }
-    </style>
 </div>
 
-<!-- SINGLE JavaScript file reference -->
+<!-- Include your existing chess study JavaScript -->
 <script src="~/js/chess-study.js"></script>
 
-<style>
-    .evaluation-bar-container {
-        width: 100%;
-        height: 20px;
-        background: #f8f9fa;
-        border: 1px solid #dee2e6;
-        border-radius: 4px;
-        position: relative;
-        overflow: hidden;
-    }
-
-    .evaluation-bar {
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(to right, #dc3545 0%, #ffc107 50%, #28a745 100%);
-        position: relative;
-    }
-
-    .evaluation-indicator {
-        position: absolute;
-        top: 0;
-        left: 50%;
-        width: 3px;
-        height: 100%;
-        background: #000;
-        transform: translateX(-50%);
-        transition: left 0.3s ease;
-    }
-
-    .move-history {
-        max-height: 200px;
-        overflow-y: auto;
-    }
-
-    .move-item {
-        display: inline-block;
-        padding: 2px 6px;
-        margin: 2px;
-        border-radius: 3px;
-        cursor: pointer;
-        background: #f8f9fa;
-    }
-
-        .move-item:hover {
-            background: #e9ecef;
+<!-- Game loading functionality -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Load game if provided
+    if (gameData) {
+        console.log('Loading game:', gameData);
+        
+        // If you have PGN, load it
+        if (gameData.pgn) {
+            loadPgnIntoBoard(gameData.pgn);
         }
-
-        .move-item.active {
-            background: #007bff;
-            color: white;
+        // If you have moves string, parse and load it
+        else if (gameData.moves) {
+            loadMovesIntoBoard(gameData.moves);
         }
-
-    #chessboard {
-        aspect-ratio: 1;
+        
+        // Display game info
+        updateGameInfo(gameData);
     }
-</style>
+});
+
+function loadPgnIntoBoard(pgn) {
+    try {
+        // Load PGN into your chess.js instance and board
+        // This depends on your existing chess-study.js implementation
+        if (typeof chess !== 'undefined') {
+            chess.load_pgn(pgn);
+            // Update board to current position
+            if (typeof board !== 'undefined') {
+                board.position(chess.fen());
+            }
+        }
+    } catch (error) {
+        console.error('Error loading PGN:', error);
+    }
+}
+
+function loadMovesIntoBoard(movesString) {
+    try {
+        // Parse moves and apply them
+        // This depends on your moves format (UCI, SAN, etc.)
+        const moves = movesString.split(' ');
+        if (typeof chess !== 'undefined') {
+            chess.reset();
+            moves.forEach(move => {
+                if (move.trim()) {
+                    try {
+                        chess.move(move);
+                    } catch (e) {
+                        console.warn('Invalid move:', move);
+                    }
+                }
+            });
+            if (typeof board !== 'undefined') {
+                board.position(chess.fen());
+            }
+        }
+    } catch (error) {
+        console.error('Error loading moves:', error);
+    }
+}
+
+function updateGameInfo(game) {
+    // Update any game-specific UI elements
+    document.title = `Chess Study - ${game.white} vs ${game.black}`;
+    
+    // Update move list if it exists
+    updateMoveList();
+}
+
+function updateMoveList() {
+    const moveListElement = document.getElementById('moveList');
+    if (moveListElement && typeof chess !== 'undefined') {
+        const history = chess.history();
+        let moveHtml = '';
+        
+        for (let i = 0; i < history.length; i += 2) {
+            const moveNumber = Math.floor(i / 2) + 1;
+            const whiteMove = history[i];
+            const blackMove = history[i + 1] || '';
+            
+            moveHtml += `
+                <div class="d-flex justify-content-between mb-1">
+                    <span class="text-muted">${moveNumber}.</span>
+                    <span class="move-white">${whiteMove}</span>
+                    <span class="move-black">${blackMove}</span>
+                </div>
+            `;
+        }
+        
+        moveListElement.innerHTML = moveHtml;
+    }
+}
+
+// Add navigation functionality if game is loaded
+if (gameData) {
+    document.addEventListener('DOMContentLoaded', function() {
+        const prevBtn = document.getElementById('prevMoveBtn');
+        const nextBtn = document.getElementById('nextMoveBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        
+        if (prevBtn) {
+            prevBtn.addEventListener('click', function() {
+                if (typeof chess !== 'undefined') {
+                    chess.undo();
+                    if (typeof board !== 'undefined') {
+                        board.position(chess.fen());
+                    }
+                }
+            });
+        }
+        
+        if (nextBtn) {
+            nextBtn.addEventListener('click', function() {
+                // This would need to track move history to go forward
+                // Implementation depends on your specific needs
+            });
+        }
+        
+        if (resetBtn) {
+            resetBtn.addEventListener('click', function() {
+                if (typeof chess !== 'undefined') {
+                    chess.reset();
+                    if (typeof board !== 'undefined') {
+                        board.position(chess.fen());
+                    }
+                    updateMoveList();
+                }
+            });
+        }
+    });
+}
+</script>

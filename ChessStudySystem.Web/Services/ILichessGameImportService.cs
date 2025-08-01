@@ -36,20 +36,17 @@ namespace ChessStudySystem.Web.Services
             _logger = logger;
             _serviceProvider = serviceProvider;
             
-            // Configure HttpClient for Lichess API
             _httpClient.DefaultRequestHeaders.Clear();
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "ChessStudySystem/1.0");
         }
 
         public async Task<int> StartImportAsync(LichessImportRequest request, CancellationToken cancellationToken = default)
         {
-            // Validate request
             if (!request.IsValid(out var errors))
             {
                 throw new ArgumentException($"Invalid request: {string.Join(", ", errors)}");
             }
 
-            // Create import session
             var session = new ImportSession
             {
                 Username = request.Username.ToLowerInvariant(),
@@ -61,31 +58,23 @@ namespace ChessStudySystem.Web.Services
             _context.ImportSessions.Add(session);
             await _context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation($"Created import session {session.Id} for user {request.Username}");
-
-            // Start background import - use a hosted service or background task queue in production
-            _ = Task.Run(async () => 
+            _ = Task.Run(async () =>
             {
+                using var scope = _serviceProvider.CreateScope();
+                var context = scope.ServiceProvider.GetRequiredService<LichessDbContext>();
+                var logger = scope.ServiceProvider.GetRequiredService<ILogger<LichessGameImportService>>();
+
                 try
                 {
-                    _logger.LogInformation($"Background task starting for session {session.Id}");
-                    
-                    // Use a separate service scope for the background task
-                    using var scope = _serviceProvider.CreateScope();
-                    var backgroundContext = scope.ServiceProvider.GetRequiredService<LichessDbContext>();
-                    var backgroundLogger = scope.ServiceProvider.GetRequiredService<ILogger<LichessGameImportService>>();
-                    
-                    await PerformImportAsync(session.Id, request, backgroundContext, backgroundLogger);
+                    await PerformImportAsync(session.Id, request, context, logger);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, $"Background task failed for session {session.Id}");
-                    
-                    // Update session status on failure
+                    logger.LogError(ex, $"Import failed for session {session.Id}");
                     try
                     {
-                        using var scope = _serviceProvider.CreateScope();
-                        var errorContext = scope.ServiceProvider.GetRequiredService<LichessDbContext>();
+                        using var errorScope = _serviceProvider.CreateScope();
+                        var errorContext = errorScope.ServiceProvider.GetRequiredService<LichessDbContext>();
                         var failedSession = await errorContext.ImportSessions.FindAsync(session.Id);
                         if (failedSession != null)
                         {
@@ -97,7 +86,7 @@ namespace ChessStudySystem.Web.Services
                     }
                     catch (Exception updateEx)
                     {
-                        _logger.LogError(updateEx, $"Failed to update session {session.Id} error status");
+                        logger.LogError(updateEx, $"Failed to update session {session.Id} error status");
                     }
                 }
             }, cancellationToken);
@@ -105,8 +94,67 @@ namespace ChessStudySystem.Web.Services
             return session.Id;
         }
 
+        private async Task DebugLichessResponse(LichessImportRequest request)
+        {
+            try
+            {
+                var testUrl = BuildApiUrl(new LichessImportRequest 
+                { 
+                    Username = request.Username, 
+                    MaxGames = 1
+                });
+                
+                _logger.LogInformation($"🔍 Debug URL: {testUrl}");
+                
+                var response = await _httpClient.GetAsync(testUrl);
+                var content = await response.Content.ReadAsStringAsync();
+                
+                _logger.LogInformation($"📥 Raw API Response ({content.Length} chars):");
+                _logger.LogInformation($"📄 First 2000 characters: {content.Substring(0, Math.Min(2000, content.Length))}");
+                
+                var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                if (lines.Length > 0)
+                {
+                    try
+                    {
+                        var gameJson = JsonSerializer.Deserialize<JsonElement>(lines[0]);
+                        _logger.LogInformation($"🎮 Game JSON keys: {string.Join(", ", gameJson.EnumerateObject().Select(p => p.Name))}");
+                        
+                        if (gameJson.TryGetProperty("pgn", out var pgnProp))
+                        {
+                            _logger.LogInformation($"✅ PGN found! Type: {pgnProp.ValueKind}, Length: {pgnProp.GetString()?.Length ?? 0}");
+                            if (pgnProp.ValueKind == JsonValueKind.String)
+                            {
+                                var pgnValue = pgnProp.GetString();
+                                _logger.LogInformation($"📝 PGN content preview: {pgnValue?.Substring(0, Math.Min(200, pgnValue.Length ?? 0))}...");
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogWarning("❌ No PGN property found in response");
+                        }
+                        
+                        if (gameJson.TryGetProperty("moves", out var movesProp))
+                        {
+                            _logger.LogInformation($"🔄 Moves found: {movesProp.GetString()?.Substring(0, Math.Min(100, movesProp.GetString()?.Length ?? 0))}...");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to parse first game JSON");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Debug request failed");
+            }
+        }
+
         private async Task PerformImportAsync(int sessionId, LichessImportRequest request, LichessDbContext context, ILogger<LichessGameImportService> logger)
         {
+            await DebugLichessResponse(request);
+
             var session = await context.ImportSessions.FindAsync(sessionId);
             if (session == null) 
             {
@@ -118,13 +166,11 @@ namespace ChessStudySystem.Web.Services
             {
                 logger.LogInformation($"Starting import for user {request.Username} (Session {sessionId})");
 
-                // Build URL and limit games for faster processing
                 var url = BuildApiUrl(request);
                 logger.LogInformation($"Fetching games from: {url}");
 
-                // Create HttpClient with timeout
                 using var httpClient = new HttpClient();
-                httpClient.Timeout = TimeSpan.FromMinutes(5); // 5 minute timeout
+                httpClient.Timeout = TimeSpan.FromMinutes(5);
                 httpClient.DefaultRequestHeaders.Add("Accept", "application/x-ndjson");
                 httpClient.DefaultRequestHeaders.Add("User-Agent", "ChessStudySystem/1.0");
 
@@ -135,40 +181,35 @@ namespace ChessStudySystem.Web.Services
                     throw new Exception($"Lichess API error: {response.StatusCode} - {response.ReasonPhrase}");
                 }
 
-                logger.LogInformation($"Successfully connected to Lichess API, reading games...");
+                logger.LogInformation($"API request successful, processing games...");
 
-                // Read all content at once instead of streaming
                 var content = await response.Content.ReadAsStringAsync();
                 var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-                logger.LogInformation($"Found {lines.Length} games to process");
-
-                var gamesToAdd = new List<LichessGame>();
-                var processedCount = 0;
-                var importedCount = 0;
-                var skippedCount = 0;
-                var errorCount = 0;
-
-                // Update initial progress
                 session.TotalGamesFound = lines.Length;
                 await context.SaveChangesAsync();
+
+                var gamesToAdd = new List<LichessGame>();
+                int processedCount = 0;
+                int importedCount = 0;
+                int skippedCount = 0;
+                int errorCount = 0;
 
                 foreach (var line in lines)
                 {
                     try
                     {
-                        if (string.IsNullOrWhiteSpace(line)) continue;
-
                         processedCount++;
 
                         var gameJson = JsonSerializer.Deserialize<JsonElement>(line);
-                        var game = ParseLichessGameSimple(gameJson, request.Username, sessionId);
+                        var game = ParseLichessGame(gameJson, request.Username);
 
                         if (game != null)
                         {
-                            // Quick duplicate check using only LichessId
-                            if (!await context.Games.AnyAsync(g => g.LichessId == game.LichessId))
+                            var existingGame = await context.Games.FirstOrDefaultAsync(g => g.LichessId == game.LichessId);
+                            if (existingGame == null)
                             {
+                                game.ImportSessionId = sessionId;
                                 gamesToAdd.Add(game);
                                 importedCount++;
                             }
@@ -182,18 +223,15 @@ namespace ChessStudySystem.Web.Services
                             errorCount++;
                         }
 
-                        // Update progress every 5 games and save in small batches
-                        if (processedCount % 5 == 0)
+                        if (gamesToAdd.Count >= 50)
                         {
-                            // Save any pending games
-                            if (gamesToAdd.Count > 0)
-                            {
-                                context.Games.AddRange(gamesToAdd);
-                                await context.SaveChangesAsync();
-                                gamesToAdd.Clear();
-                            }
+                            context.Games.AddRange(gamesToAdd);
+                            await context.SaveChangesAsync();
+                            gamesToAdd.Clear();
+                        }
 
-                            // Update session progress
+                        if (processedCount % 100 == 0)
+                        {
                             session.GamesProcessed = processedCount;
                             session.GamesImported = importedCount;
                             session.GamesSkipped = skippedCount;
@@ -203,7 +241,6 @@ namespace ChessStudySystem.Web.Services
                             logger.LogInformation($"Progress: {processedCount}/{lines.Length} ({processedCount * 100 / lines.Length}%)");
                         }
 
-                        // Stop if we've reached the max limit
                         if (request.MaxGames.HasValue && processedCount >= request.MaxGames.Value)
                         {
                             break;
@@ -216,14 +253,12 @@ namespace ChessStudySystem.Web.Services
                     }
                 }
 
-                // Save any remaining games
                 if (gamesToAdd.Count > 0)
                 {
                     context.Games.AddRange(gamesToAdd);
                     await context.SaveChangesAsync();
                 }
 
-                // Final update
                 session.GamesProcessed = processedCount;
                 session.GamesImported = importedCount;
                 session.GamesSkipped = skippedCount;
@@ -247,181 +282,93 @@ namespace ChessStudySystem.Web.Services
             }
         }
 
-        // Simplified game parsing for faster processing
-        private LichessGame? ParseLichessGameSimple(JsonElement gameJson, string username, int sessionId)
+        private LichessGame? ParseLichessGame(JsonElement gameJson, string username)
         {
             try
             {
-                var lichessId = GetStringProperty(gameJson, "id");
-                if (string.IsNullOrEmpty(lichessId)) return null;
+                var gameId = GetStringProperty(gameJson, "id") ?? "unknown";
+                _logger.LogInformation($"🎮 Parsing game {gameId}");
 
                 var game = new LichessGame
                 {
-                    LichessId = lichessId,
+                    LichessId = gameId,
                     Username = username.ToLowerInvariant(),
-                    ImportSessionId = sessionId,
-                    ImportedAt = DateTime.UtcNow,
-                    CreatedAt = GetDateTimeProperty(gameJson, "createdAt") ?? DateTime.UtcNow,
                     Rated = GetBoolProperty(gameJson, "rated"),
                     Variant = GetStringProperty(gameJson, "variant"),
                     Speed = GetStringProperty(gameJson, "speed"),
                     PerfType = GetStringProperty(gameJson, "perf"),
+                    CreatedAt = GetDateTimeProperty(gameJson, "createdAt") ?? DateTime.UtcNow,
+                    LastMoveAt = GetDateTimeProperty(gameJson, "lastMoveAt"),
                     Status = GetStringProperty(gameJson, "status"),
                     Winner = GetStringProperty(gameJson, "winner"),
-                    Moves = GetStringProperty(gameJson, "moves")
-                };
-
-                // Count moves
-                if (!string.IsNullOrEmpty(game.Moves))
-                {
-                    game.MovesCount = game.Moves.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
-                }
-
-                // Parse players (simplified)
-                if (gameJson.TryGetProperty("players", out var players))
-                {
-                    if (players.TryGetProperty("white", out var white))
-                    {
-                        game.WhiteUsername = GetNestedStringProperty(white, "user", "name");
-                        game.WhiteRating = GetIntProperty(white, "rating");
-                    }
-
-                    if (players.TryGetProperty("black", out var black))
-                    {
-                        game.BlackUsername = GetNestedStringProperty(black, "user", "name");
-                        game.BlackRating = GetIntProperty(black, "rating");
-                    }
-                }
-
-                // Determine user's color and result (simplified)
-                if (game.WhiteUsername?.Equals(username, StringComparison.OrdinalIgnoreCase) == true)
-                {
-                    game.UserColor = "white";
-                    game.UserRating = game.WhiteRating;
-                    game.OpponentUsername = game.BlackUsername;
-                    game.UserResult = game.Winner == "white" ? "win" : (game.Winner == "black" ? "loss" : "draw");
-                }
-                else if (game.BlackUsername?.Equals(username, StringComparison.OrdinalIgnoreCase) == true)
-                {
-                    game.UserColor = "black";
-                    game.UserRating = game.BlackRating;
-                    game.OpponentUsername = game.WhiteUsername;
-                    game.UserResult = game.Winner == "black" ? "win" : (game.Winner == "white" ? "loss" : "draw");
-                }
-
-                // Parse opening (simplified)
-                if (gameJson.TryGetProperty("opening", out var opening))
-                {
-                    game.OpeningEco = GetStringProperty(opening, "eco");
-                    game.OpeningName = GetStringProperty(opening, "name");
-                }
-
-                return game;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error parsing Lichess game");
-                return null;
-            }
-        }
-
-        private string BuildApiUrl(LichessImportRequest request)
-        {
-            var queryParams = new List<string>();
-
-            if (request.MaxGames.HasValue)
-                queryParams.Add($"max={request.MaxGames}");
-
-            if (request.Since.HasValue)
-                queryParams.Add($"since={((DateTimeOffset)request.Since.Value).ToUnixTimeMilliseconds()}");
-
-            if (request.Until.HasValue)
-                queryParams.Add($"until={((DateTimeOffset)request.Until.Value).ToUnixTimeMilliseconds()}");
-
-            // Only include valid performance types (standard chess)
-            var validPerfTypes = new[] { "bullet", "blitz", "rapid", "classical", "correspondence" };
-            if (request.PerfTypes.Any())
-            {
-                var validTypes = request.PerfTypes.Where(t => validPerfTypes.Contains(t));
-                if (validTypes.Any())
-                    queryParams.Add($"perfType={string.Join(",", validTypes)}");
-            }
-
-            if (!string.IsNullOrEmpty(request.Opponent))
-                queryParams.Add($"vs={request.Opponent}");
-
-            if (!string.IsNullOrEmpty(request.Color))
-                queryParams.Add($"color={request.Color}");
-
-            if (request.RatedOnly.HasValue)
-                queryParams.Add($"rated={request.RatedOnly.Value.ToString().ToLowerInvariant()}");
-
-            if (request.AnalyzedOnly == true)
-                queryParams.Add("analyzed=true");
-
-            if (request.OnlyFinished)
-                queryParams.Add("finished=true");
-
-            // Always include these for better data
-            queryParams.Add("opening=true");
-            queryParams.Add("clocks=true");
-            queryParams.Add("moves=true");
-
-            if (request.IncludeAnalysis)
-                queryParams.Add("evals=true");
-
-            if (request.IncludePgn)
-                queryParams.Add("pgnInJson=true");
-
-            var query = string.Join("&", queryParams);
-            return $"{LichessApiBase}/games/user/{request.Username}?{query}";
-        }
-
-        private LichessGame? ParseLichessGame(JsonElement gameJson, string username, int sessionId)
-        {
-            try
-            {
-                var game = new LichessGame
-                {
-                    LichessId = GetStringProperty(gameJson, "id") ?? string.Empty,
-                    Username = username.ToLowerInvariant(),
-                    ImportSessionId = sessionId,
+                    Termination = GetStringProperty(gameJson, "termination"),
                     ImportedAt = DateTime.UtcNow
                 };
 
-                if (string.IsNullOrEmpty(game.LichessId)) return null;
+                // Extract PGN with detailed logging
+                if (gameJson.TryGetProperty("pgn", out var pgnProperty))
+                {
+                    _logger.LogInformation($"✅ Game {gameId}: Found PGN property, type: {pgnProperty.ValueKind}");
+                    if (pgnProperty.ValueKind == JsonValueKind.String)
+                    {
+                        var pgnValue = pgnProperty.GetString();
+                        game.Pgn = pgnValue;
+                        _logger.LogInformation($"📝 Game {gameId}: PGN extracted, length: {pgnValue?.Length ?? 0}");
+                        if (!string.IsNullOrEmpty(pgnValue))
+                        {
+                            _logger.LogInformation($"📄 Game {gameId}: PGN preview: {pgnValue.Substring(0, Math.Min(100, pgnValue.Length))}...");
+                        }
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning($"❌ Game {gameId}: No PGN property found");
+                }
 
-                // Basic game properties
-                game.Rated = GetBoolProperty(gameJson, "rated");
-                game.Variant = GetStringProperty(gameJson, "variant");
-                game.Speed = GetStringProperty(gameJson, "speed");
-                game.PerfType = GetStringProperty(gameJson, "perf");
-                game.Status = GetStringProperty(gameJson, "status");
-                game.Winner = GetStringProperty(gameJson, "winner");
+                // Extract moves
+                if (gameJson.TryGetProperty("moves", out var movesProperty))
+                {
+                    if (movesProperty.ValueKind == JsonValueKind.String)
+                    {
+                        var movesValue = movesProperty.GetString();
+                        game.Moves = movesValue;
+                        if (!string.IsNullOrEmpty(movesValue))
+                        {
+                            game.MovesCount = movesValue.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+                            _logger.LogInformation($"🔄 Game {gameId}: Moves extracted, count: {game.MovesCount}");
+                        }
+                    }
+                }
 
-                // Dates
-                game.CreatedAt = GetDateTimeProperty(gameJson, "createdAt") ?? DateTime.UtcNow;
-                game.LastMoveAt = GetDateTimeProperty(gameJson, "lastMoveAt");
-
-                // Players
+                // Extract players
                 if (gameJson.TryGetProperty("players", out var players))
                 {
                     if (players.TryGetProperty("white", out var white))
                     {
                         game.WhiteUsername = GetNestedStringProperty(white, "user", "name");
-                        game.WhiteRating = GetIntProperty(white, "rating");
-                        game.WhiteRatingDiff = GetIntProperty(white, "ratingDiff");
+                        game.WhiteTitle = GetNestedStringProperty(white, "user", "title");
+                        
+                        if (white.TryGetProperty("rating", out var whiteRating) && whiteRating.ValueKind == JsonValueKind.Number)
+                            game.WhiteRating = whiteRating.GetInt32();
+                        
+                        if (white.TryGetProperty("ratingDiff", out var whiteRatingDiff) && whiteRatingDiff.ValueKind == JsonValueKind.Number)
+                            game.WhiteRatingDiff = whiteRatingDiff.GetInt32();
                     }
 
                     if (players.TryGetProperty("black", out var black))
                     {
                         game.BlackUsername = GetNestedStringProperty(black, "user", "name");
-                        game.BlackRating = GetIntProperty(black, "rating");
-                        game.BlackRatingDiff = GetIntProperty(black, "ratingDiff");
+                        game.BlackTitle = GetNestedStringProperty(black, "user", "title");
+                        
+                        if (black.TryGetProperty("rating", out var blackRating) && blackRating.ValueKind == JsonValueKind.Number)
+                            game.BlackRating = blackRating.GetInt32();
+                        
+                        if (black.TryGetProperty("ratingDiff", out var blackRatingDiff) && blackRatingDiff.ValueKind == JsonValueKind.Number)
+                            game.BlackRatingDiff = blackRatingDiff.GetInt32();
                     }
                 }
 
-                // Determine user's perspective
+                // Set user-specific data
                 var isWhite = game.WhiteUsername?.Equals(username, StringComparison.OrdinalIgnoreCase) == true;
                 var isBlack = game.BlackUsername?.Equals(username, StringComparison.OrdinalIgnoreCase) == true;
 
@@ -444,20 +391,32 @@ namespace ChessStudySystem.Web.Services
                     game.UserResult = game.Winner == "black" ? "win" : (game.Winner == "white" ? "loss" : "draw");
                 }
 
-                // Opening
+                // Parse opening
                 if (gameJson.TryGetProperty("opening", out var opening))
                 {
                     game.OpeningEco = GetStringProperty(opening, "eco");
                     game.OpeningName = GetStringProperty(opening, "name");
-                    game.OpeningPly = GetIntProperty(opening, "ply");
+                    
+                    var openingPly = GetIntProperty(opening, "ply");
+                    if (openingPly.HasValue)
+                        game.OpeningPly = openingPly.Value;
                 }
 
-                // Clock
+                // Parse clock
                 if (gameJson.TryGetProperty("clock", out var clock))
                 {
-                    game.InitialTime = GetIntProperty(clock, "initial");
-                    game.Increment = GetIntProperty(clock, "increment");
-                    game.TotalTime = GetIntProperty(clock, "totalTime");
+                    var initialTime = GetIntProperty(clock, "initial");
+                    var increment = GetIntProperty(clock, "increment");
+                    var totalTime = GetIntProperty(clock, "totalTime");
+                    
+                    if (initialTime.HasValue)
+                        game.InitialTime = initialTime.Value;
+                    
+                    if (increment.HasValue)
+                        game.Increment = increment.Value;
+                        
+                    if (totalTime.HasValue)
+                        game.TotalTime = totalTime.Value;
                     
                     if (game.InitialTime.HasValue && game.Increment.HasValue)
                     {
@@ -465,39 +424,75 @@ namespace ChessStudySystem.Web.Services
                     }
                 }
 
-                // Moves
-                game.Moves = GetStringProperty(gameJson, "moves");
-                if (!string.IsNullOrEmpty(game.Moves))
-                {
-                    game.MovesCount = game.Moves.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
-                }
-
-                // PGN (if included)
-                game.Pgn = GetStringProperty(gameJson, "pgn");
-
-                // Analysis
+                // Parse analysis
                 if (gameJson.TryGetProperty("analysis", out var analysis))
                 {
                     game.HasAnalysis = true;
                     game.Analysis = analysis.ToString();
                 }
 
+                _logger.LogInformation($"✅ Game {gameId}: Parsed successfully. PGN: {(string.IsNullOrEmpty(game.Pgn) ? "EMPTY" : $"{game.Pgn.Length} chars")}");
+
                 return game;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error parsing Lichess game");
+                _logger.LogError(ex, $"❌ Error parsing Lichess game: {ex.Message}");
                 return null;
             }
         }
 
-        private static string? GetNestedStringProperty(JsonElement element, string parentProperty, string childProperty)
+        private string BuildApiUrl(LichessImportRequest request)
         {
-            return element.TryGetProperty(parentProperty, out var parent) &&
-                   parent.TryGetProperty(childProperty, out var child) &&
-                   child.ValueKind == JsonValueKind.String
-                ? child.GetString()
-                : null;
+            var queryParams = new List<string>();
+
+            if (request.MaxGames.HasValue)
+                queryParams.Add($"max={request.MaxGames}");
+
+            if (request.Since.HasValue)
+                queryParams.Add($"since={((DateTimeOffset)request.Since.Value).ToUnixTimeMilliseconds()}");
+
+            if (request.Until.HasValue)
+                queryParams.Add($"until={((DateTimeOffset)request.Until.Value).ToUnixTimeMilliseconds()}");
+
+            var validPerfTypes = new[] { "bullet", "blitz", "rapid", "classical", "correspondence" };
+            if (request.PerfTypes != null && request.PerfTypes.Any())
+            {
+                var validTypes = request.PerfTypes.Where(t => validPerfTypes.Contains(t));
+                if (validTypes.Any())
+                    queryParams.Add($"perfType={string.Join(",", validTypes)}");
+            }
+
+            if (!string.IsNullOrEmpty(request.Opponent))
+                queryParams.Add($"vs={request.Opponent}");
+
+            if (!string.IsNullOrEmpty(request.Color))
+                queryParams.Add($"color={request.Color}");
+
+            if (request.RatedOnly.HasValue)
+                queryParams.Add($"rated={request.RatedOnly.Value.ToString().ToLowerInvariant()}");
+
+            if (request.AnalyzedOnly == true)
+                queryParams.Add("analyzed=true");
+
+            if (request.OnlyFinished)
+                queryParams.Add("finished=true");
+
+            // ALWAYS include these parameters
+            queryParams.Add("opening=true");
+            queryParams.Add("clocks=true");
+            queryParams.Add("moves=true");
+            queryParams.Add("pgnInJson=true");
+
+            if (request.IncludeAnalysis)
+                queryParams.Add("evals=true");
+
+            var query = string.Join("&", queryParams);
+            var finalUrl = $"{LichessApiBase}/games/user/{request.Username}?{query}";
+            
+            _logger.LogInformation($"🌐 Lichess API URL: {finalUrl}");
+            
+            return finalUrl;
         }
 
         public async Task<ImportSession?> GetImportSessionAsync(int sessionId)
@@ -529,103 +524,83 @@ namespace ChessStudySystem.Web.Services
         {
             var normalizedUsername = username.ToLowerInvariant().Trim();
             
-            // Check if user exists in database and is recent
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == normalizedUsername);
             
-            // Update if user doesn't exist or data is older than 1 hour
-            if (user == null || user.LastUpdated < DateTime.UtcNow.AddHours(-1))
+            if (user == null || DateTime.UtcNow.Subtract(user.LastUpdated).TotalHours > 24)
             {
-                var updatedUser = await FetchUserFromLichessAsync(normalizedUsername);
-                if (updatedUser == null) return null;
-
-                if (user == null)
+                try
                 {
-                    _context.Users.Add(updatedUser);
-                }
-                else
-                {
-                    _context.Entry(user).CurrentValues.SetValues(updatedUser);
-                    user.Id = user.Id; // Preserve the original ID
-                }
-
-                await _context.SaveChangesAsync();
-                return updatedUser;
-            }
-
-            return user;
-        }
-
-        private async Task<LichessUser?> FetchUserFromLichessAsync(string username)
-        {
-            try
-            {
-                var url = $"{LichessApiBase}/user/{username}";
-                _logger.LogInformation($"Fetching user data from: {url}");
-                
-                var response = await _httpClient.GetAsync(url);
-                
-                _logger.LogInformation($"Lichess API response: {response.StatusCode}");
-                
-                if (!response.IsSuccessStatusCode) 
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    _logger.LogWarning($"Lichess API error: {response.StatusCode} - {errorContent}");
-                    return null;
-                }
-
-                var content = await response.Content.ReadAsStringAsync();
-                _logger.LogInformation($"Lichess API response content length: {content.Length}");
-                
-                var userJson = JsonSerializer.Deserialize<JsonElement>(content);
-
-                var user = new LichessUser
-                {
-                    Username = username,
-                    DisplayName = GetStringProperty(userJson, "username"),
-                    Title = GetStringProperty(userJson, "title"),
-                    IsOnline = GetBoolProperty(userJson, "online"),
-                    JoinedAt = GetDateTimeProperty(userJson, "createdAt"),
-                    LastSeenAt = GetDateTimeProperty(userJson, "seenAt"),
-                    Country = GetStringProperty(userJson, "country"),
-                    IsPatron = GetBoolProperty(userJson, "patron"),
-                    IsVerified = GetBoolProperty(userJson, "verified"),
-                    LastUpdated = DateTime.UtcNow
-                };
-
-                // Parse count data
-                if (userJson.TryGetProperty("count", out var count))
-                {
-                    user.TotalGames = GetIntProperty(count, "all") ?? 0;
-                    user.RatedGames = GetIntProperty(count, "rated") ?? 0;
-                    user.Wins = GetIntProperty(count, "win") ?? 0;
-                    user.Losses = GetIntProperty(count, "loss") ?? 0;
-                    user.Draws = GetIntProperty(count, "draw") ?? 0;
-                }
-
-                // Parse performance data (simplified)
-                if (userJson.TryGetProperty("perfs", out var perfs))
-                {
-                    var perfTypes = new[] { "bullet", "blitz", "rapid", "classical", "correspondence" };
-                    foreach (var perfType in perfTypes)
+                    var url = $"{LichessApiBase}/user/{normalizedUsername}";
+                    var response = await _httpClient.GetAsync(url);
+                    
+                    if (!response.IsSuccessStatusCode)
                     {
-                        if (perfs.TryGetProperty(perfType, out var perf))
+                        return user;
+                    }
+
+                    var content = await response.Content.ReadAsStringAsync();
+                    var userJson = JsonSerializer.Deserialize<JsonElement>(content);
+
+                    if (user == null)
+                    {
+                        user = new LichessUser
                         {
-                            user.Performances[perfType] = new PerformanceStats
+                            Username = normalizedUsername,
+                            LastUpdated = DateTime.UtcNow
+                        };
+                        _context.Users.Add(user);
+                    }
+
+                    user.DisplayName = GetStringProperty(userJson, "title");
+                    user.Title = GetStringProperty(userJson, "title");
+                    user.IsOnline = GetBoolProperty(userJson, "online");
+                    user.Country = GetStringProperty(userJson, "country");
+                    user.IsPatron = GetBoolProperty(userJson, "patron");
+                    user.IsVerified = GetBoolProperty(userJson, "verified");
+                    user.LastUpdated = DateTime.UtcNow;
+
+                    if (userJson.TryGetProperty("count", out var count))
+                    {
+                        var totalGames = GetIntProperty(count, "all");
+                        var ratedGames = GetIntProperty(count, "rated");
+                        var wins = GetIntProperty(count, "win");
+                        var losses = GetIntProperty(count, "loss");
+                        var draws = GetIntProperty(count, "draw");
+                        
+                        user.TotalGames = totalGames ?? 0;
+                        user.RatedGames = ratedGames ?? 0;
+                        user.Wins = wins ?? 0;
+                        user.Losses = losses ?? 0;
+                        user.Draws = draws ?? 0;
+                    }
+
+                    if (userJson.TryGetProperty("perfs", out var perfs))
+                    {
+                        user.Performances.Clear();
+                        foreach (var perf in perfs.EnumerateObject())
+                        {
+                            var rating = GetIntProperty(perf.Value, "rating");
+                            var games = GetIntProperty(perf.Value, "games");
+                            
+                            user.Performances[perf.Name] = new PerformanceStats
                             {
-                                Rating = GetIntProperty(perf, "rating") ?? 1500,
-                                Games = GetIntProperty(perf, "games") ?? 0
+                                Rating = rating ?? 1500,
+                                Games = games ?? 0
                             };
                         }
                     }
-                }
 
-                return user;
+                    await _context.SaveChangesAsync();
+                    return user;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Error fetching user data for {username}");
+                    return user;
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error fetching user data for {username}");
-                return null;
-            }
+
+            return user;
         }
 
         public async Task<GameStatistics> GetGameStatisticsAsync(string username)
@@ -652,22 +627,94 @@ namespace ChessStudySystem.Web.Services
         {
             var query = _context.Games.AsQueryable();
             
+            // Apply filters
             if (!string.IsNullOrEmpty(request.Username))
                 query = query.Where(g => g.Username == request.Username.ToLowerInvariant());
 
+            if (!string.IsNullOrEmpty(request.Opponent))
+                query = query.Where(g => g.OpponentUsername != null && g.OpponentUsername.Contains(request.Opponent));
+
+            if (!string.IsNullOrEmpty(request.Opening))
+                query = query.Where(g => g.OpeningName != null && g.OpeningName.Contains(request.Opening));
+
+            if (!string.IsNullOrEmpty(request.EcoCode))
+                query = query.Where(g => g.OpeningEco == request.EcoCode);
+
+            if (!string.IsNullOrEmpty(request.Result))
+                query = query.Where(g => g.UserResult == request.Result);
+
+            if (!string.IsNullOrEmpty(request.Color))
+                query = query.Where(g => g.UserColor == request.Color);
+
+            if (request.PerfTypes != null && request.PerfTypes.Any())
+                query = query.Where(g => request.PerfTypes.Contains(g.PerfType));
+
+            if (request.FromDate.HasValue)
+                query = query.Where(g => g.CreatedAt >= request.FromDate.Value);
+
+            if (request.ToDate.HasValue)
+                query = query.Where(g => g.CreatedAt <= request.ToDate.Value);
+
+            if (request.MinRating.HasValue)
+                query = query.Where(g => g.UserRating >= request.MinRating.Value);
+
+            if (request.MaxRating.HasValue)
+                query = query.Where(g => g.UserRating <= request.MaxRating.Value);
+
+            if (request.RatedOnly.HasValue)
+                query = query.Where(g => g.Rated == request.RatedOnly.Value);
+
+            if (request.AnalyzedOnly.HasValue && request.AnalyzedOnly.Value)
+                query = query.Where(g => g.HasAnalysis);
+
+            if (!string.IsNullOrEmpty(request.Status))
+                query = query.Where(g => g.Status == request.Status);
+
+            if (request.MinMoves.HasValue)
+                query = query.Where(g => g.MovesCount >= request.MinMoves.Value);
+
+            if (request.MaxMoves.HasValue)
+                query = query.Where(g => g.MovesCount <= request.MaxMoves.Value);
+
+            // Apply sorting
+            query = (request.SortBy?.ToLower(), request.SortDirection?.ToLower()) switch
+            {
+                ("date", "asc") or ("createdat", "asc") => query.OrderBy(g => g.CreatedAt),
+                ("date", "desc") or ("createdat", "desc") or ("date", null) or ("createdat", null) => query.OrderByDescending(g => g.CreatedAt),
+                ("opponent", "asc") => query.OrderBy(g => g.OpponentUsername),
+                ("opponent", "desc") => query.OrderByDescending(g => g.OpponentUsername),
+                ("result", "asc") => query.OrderBy(g => g.UserResult),
+                ("result", "desc") => query.OrderByDescending(g => g.UserResult),
+                ("color", "asc") => query.OrderBy(g => g.UserColor),
+                ("color", "desc") => query.OrderByDescending(g => g.UserColor),
+                ("rating", "asc") => query.OrderBy(g => g.UserRating),
+                ("rating", "desc") => query.OrderByDescending(g => g.UserRating),
+                ("timecontrol", "asc") or ("time", "asc") => query.OrderBy(g => g.TimeControl),
+                ("timecontrol", "desc") or ("time", "desc") => query.OrderByDescending(g => g.TimeControl),
+                ("opening", "asc") => query.OrderBy(g => g.OpeningName),
+                ("opening", "desc") => query.OrderByDescending(g => g.OpeningName),
+                ("moves", "asc") => query.OrderBy(g => g.MovesCount),
+                ("moves", "desc") => query.OrderByDescending(g => g.MovesCount),
+                _ => query.OrderByDescending(g => g.CreatedAt)
+            };
+
             var totalCount = await query.CountAsync();
-            var games = await query.Take(request.PageSize).ToListAsync();
+            
+            var games = await query
+                .Skip((request.Page - 1) * request.PageSize)
+                .Take(request.PageSize)
+                .ToListAsync();
 
             return (games, totalCount);
         }
 
         public async Task<string> ExportGamesAsync(LichessGameSearchRequest request, string format = "pgn")
         {
-            await Task.Delay(100); // Placeholder
+            await Task.Delay(100);
             return "Placeholder export";
         }
 
-        // Helper methods for JSON parsing
+        // Helper methods
         private static string? GetStringProperty(JsonElement element, string propertyName)
         {
             return element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
@@ -689,12 +736,29 @@ namespace ChessStudySystem.Web.Services
 
         private static DateTime? GetDateTimeProperty(JsonElement element, string propertyName)
         {
-            if (element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.Number)
+            if (element.TryGetProperty(propertyName, out var property))
             {
-                var timestamp = property.GetInt64();
-                return DateTimeOffset.FromUnixTimeMilliseconds(timestamp).DateTime;
+                if (property.ValueKind == JsonValueKind.Number)
+                {
+                    var timestamp = property.GetInt64();
+                    return DateTimeOffset.FromUnixTimeMilliseconds(timestamp).DateTime;
+                }
+                else if (property.ValueKind == JsonValueKind.String)
+                {
+                    if (DateTime.TryParse(property.GetString(), out var date))
+                        return date;
+                }
             }
             return null;
+        }
+
+        private static string? GetNestedStringProperty(JsonElement element, string parentProperty, string childProperty)
+        {
+            return element.TryGetProperty(parentProperty, out var parent) &&
+                   parent.TryGetProperty(childProperty, out var child) &&
+                   child.ValueKind == JsonValueKind.String
+                ? child.GetString()
+                : null;
         }
     }
 }

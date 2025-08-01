@@ -1,4 +1,8 @@
-﻿// Clean Chess Study with Lichess API
+﻿// Add these imports at the very top of your chess-study.js file
+import { Chessground } from './chessground/chessground.js';
+
+
+
 class ChessStudy {
     constructor() {
         this.chess = new Chess();
@@ -54,7 +58,6 @@ class ChessStudy {
 
         console.log('♛ Chessboard created successfully');
     }
-
     setupEventListeners() {
         // Analyze button
         document.getElementById('analyzeBtn').addEventListener('click', () => {
@@ -1118,10 +1121,93 @@ class ChessStudy {
             container.innerHTML = '<div class="text-muted text-center py-3"><small>Multi-line analysis will appear here</small></div>';
         }
     }
+
+    // Game loading functions
+function loadPgnIntoBoard(pgn) {
+    try {
+        if (window.chessStudy && window.chessStudy.chess) {
+            window.chessStudy.chess.load_pgn(pgn);
+            if (window.chessStudy.board) {
+                window.chessStudy.board.set({ fen: window.chessStudy.chess.fen() });
+            }
+        }
+    } catch (error) {
+        console.error('Error loading PGN:', error);
+    }
+}
+
+function loadMovesIntoBoard(movesString) {
+    try {
+        const moves = movesString.split(' ');
+        if (window.chessStudy && window.chessStudy.chess) {
+            window.chessStudy.chess.reset();
+            moves.forEach(move => {
+                if (move.trim()) {
+                    try {
+                        window.chessStudy.chess.move(move);
+                    } catch (e) {
+                        console.warn('Invalid move:', move);
+                    }
+                }
+            });
+            if (window.chessStudy.board) {
+                window.chessStudy.board.set({ fen: window.chessStudy.chess.fen() });
+            }
+        }
+    } catch (error) {
+        console.error('Error loading moves:', error);
+    }
+}
+
+function updateGameInfo(game) {
+    document.title = `Chess Study - ${game.white} vs ${game.black}`;
+    updateMoveList();
+}
+
+function updateMoveList() {
+    const moveListElement = document.getElementById('moveList');
+    if (moveListElement && window.chessStudy && window.chessStudy.chess) {
+        const history = window.chessStudy.chess.history();
+        let moveHtml = '';
+
+        for (let i = 0; i < history.length; i += 2) {
+            const moveNumber = Math.floor(i / 2) + 1;
+            const whiteMove = history[i];
+            const blackMove = history[i + 1] || '';
+
+            moveHtml += `
+                <div class="d-flex justify-content-between mb-1">
+                    <span class="text-muted">${moveNumber}.</span>
+                    <span class="move-white">${whiteMove}</span>
+                    <span class="move-black">${blackMove}</span>
+                </div>
+            `;
+        }
+
+        moveListElement.innerHTML = moveHtml;
+    }
+}
 }
 
 
-// Initialize when page loads
-document.addEventListener('DOMContentLoaded', () => {
+// Make sure to initialize when DOM is loaded
+document.addEventListener('DOMContentLoaded', function () {
     window.chessStudy = new ChessStudy();
+
+    // Load game if provided
+    if (typeof gameData !== 'undefined' && gameData) {
+        console.log('Loading game:', gameData);
+
+        // If you have PGN, load it
+        if (gameData.pgn) {
+            loadPgnIntoBoard(gameData.pgn);
+        }
+        // If you have moves string, parse and load it
+        else if (gameData.moves) {
+            loadMovesIntoBoard(gameData.moves);
+        }
+
+        // Display game info
+        updateGameInfo(gameData);
+    }
 });

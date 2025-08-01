@@ -42,6 +42,14 @@ namespace ChessStudySystem.Web.Data
                 entity.Property(e => e.OpeningName).HasMaxLength(200);
                 entity.Property(e => e.TimeControl).HasMaxLength(20);
                 entity.Property(e => e.Termination).HasMaxLength(50);
+                entity.Property(e => e.WhiteTitle).HasMaxLength(10);
+                entity.Property(e => e.BlackTitle).HasMaxLength(10);
+                entity.Property(e => e.OpponentTitle).HasMaxLength(10);
+
+                // Configure large text columns
+                entity.Property(e => e.Moves).HasColumnType("TEXT");
+                entity.Property(e => e.Pgn).HasColumnType("TEXT");
+                entity.Property(e => e.Analysis).HasColumnType("TEXT");
 
                 // Performance indexes
                 entity.HasIndex(e => e.Username);
@@ -54,6 +62,12 @@ namespace ChessStudySystem.Web.Data
                 entity.HasIndex(e => new { e.Username, e.PerfType });
                 entity.HasIndex(e => new { e.Username, e.CreatedAt });
                 entity.HasIndex(e => new { e.OpeningEco, e.UserResult });
+
+                // Configure relationship with ImportSession
+                entity.HasOne(e => e.ImportSession)
+                      .WithMany(s => s.Games)
+                      .HasForeignKey(e => e.ImportSessionId)
+                      .OnDelete(DeleteBehavior.Cascade);
             });
 
             // Configure LichessUser entity
@@ -65,13 +79,15 @@ namespace ChessStudySystem.Web.Data
                 entity.Property(e => e.DisplayName).HasMaxLength(100);
                 entity.Property(e => e.Title).HasMaxLength(10);
                 entity.Property(e => e.Country).HasMaxLength(5);
+                entity.Property(e => e.Bio).HasMaxLength(1000);
                 
                 // Store performance ratings as JSON
                 entity.Property(e => e.Performances)
                     .HasConversion(
                         v => JsonSerializer.Serialize(v, JsonSerializerOptions.Default),
                         v => JsonSerializer.Deserialize<Dictionary<string, PerformanceStats>>(v, JsonSerializerOptions.Default) ?? new Dictionary<string, PerformanceStats>()
-                    );
+                    )
+                    .HasColumnType("TEXT");
             });
 
             // Configure ImportSession entity
@@ -86,12 +102,27 @@ namespace ChessStudySystem.Web.Data
                 entity.HasIndex(e => e.StartedAt);
                 entity.HasIndex(e => e.Status);
                 
-                // Store filters as JSON
+                // Configure FiltersUsed as JSON column
                 entity.Property(e => e.FiltersUsed)
                     .HasConversion(
                         v => JsonSerializer.Serialize(v, JsonSerializerOptions.Default),
                         v => JsonSerializer.Deserialize<Dictionary<string, object>>(v, JsonSerializerOptions.Default) ?? new Dictionary<string, object>()
-                    );
+                    )
+                    .HasColumnType("TEXT");
+
+                // Configure Errors as JSON column
+                entity.Property(e => e.Errors)
+                    .HasConversion(
+                        v => JsonSerializer.Serialize(v, JsonSerializerOptions.Default),
+                        v => JsonSerializer.Deserialize<List<string>>(v, JsonSerializerOptions.Default) ?? new List<string>()
+                    )
+                    .HasColumnType("TEXT");
+
+                // Configure the relationship with Games
+                entity.HasMany(e => e.Games)
+                      .WithOne(g => g.ImportSession)
+                      .HasForeignKey(g => g.ImportSessionId)
+                      .OnDelete(DeleteBehavior.Cascade);
             });
         }
     }

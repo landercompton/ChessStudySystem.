@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using ChessStudySystem.Web.Models;
+using ChessStudySystem.Web.Models.Lichess;
 using ChessStudySystem.Web.Data;
 using ChessStudySystem.Web.Services;
 using Microsoft.EntityFrameworkCore;
@@ -11,19 +12,31 @@ namespace ChessStudySystem.Web.Controllers
         private readonly ApplicationDbContext _context;
         private readonly IOpeningImportService _importService;
         private readonly ILogger<ChessController> _logger;
+        private readonly LichessDbContext _lichessContext;
 
         public ChessController(
             ApplicationDbContext context, 
             IOpeningImportService importService,
-            ILogger<ChessController> logger)
+            ILogger<ChessController> logger,
+            LichessDbContext lichessContext)
         {
             _context = context;
             _importService = importService;
             _logger = logger;
+            _lichessContext = lichessContext;
         }
 
-        public IActionResult Study()
+        public async Task<IActionResult> Study(string? gameId = null)
         {
+            LichessGame? game = null;
+            
+            if (!string.IsNullOrEmpty(gameId))
+            {
+                game = await _lichessContext.Games
+                    .FirstOrDefaultAsync(g => g.LichessId == gameId);
+            }
+            
+            ViewBag.Game = game;
             return View();
         }
 

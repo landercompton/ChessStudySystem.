@@ -53,7 +53,7 @@ namespace ChessStudySystem.Web.Controllers
 
                 // Start import
                 var sessionId = await _importService.StartImportAsync(request);
-                
+
                 TempData["Success"] = $"Import started for {request.Username}";
                 TempData["SessionId"] = sessionId;
                 TempData["Username"] = request.Username;
@@ -110,7 +110,7 @@ namespace ChessStudySystem.Web.Controllers
         public async Task<IActionResult> CancelImport(int sessionId)
         {
             var success = await _importService.CancelImportAsync(sessionId);
-            
+
             if (success)
             {
                 TempData["Info"] = "Import cancelled successfully.";
@@ -153,103 +153,103 @@ namespace ChessStudySystem.Web.Controllers
             return View(games);
         }
 
-[HttpGet]
-public async Task<IActionResult> Search(
-    string? username = null,
-    string? opponent = null,
-    string? opening = null,
-    string? ecoCode = null,
-    string? result = null,
-    string? color = null,
-    List<string>? perfTypes = null,
-    DateTime? fromDate = null,
-    DateTime? toDate = null,
-    int? minRating = null,
-    int? maxRating = null,
-    bool? ratedOnly = null,
-    bool? analyzedOnly = null,
-    string? status = null,
-    int? minMoves = null,
-    int? maxMoves = null,
-    string? sortBy = null,
-    string? sortDirection = null,
-    int page = 1,
-    int pageSize = 50)
-{
-    // If only username is provided (or no parameters), show the search form
-    if (string.IsNullOrEmpty(opponent) && string.IsNullOrEmpty(opening) && 
-        string.IsNullOrEmpty(ecoCode) && string.IsNullOrEmpty(result) && 
-        string.IsNullOrEmpty(color) && (perfTypes == null || !perfTypes.Any()) && 
-        fromDate == null && toDate == null && minRating == null && maxRating == null && 
-        ratedOnly == null && analyzedOnly == null && string.IsNullOrEmpty(status) && 
-        minMoves == null && maxMoves == null && page == 1)
-    {
-        var model = new LichessGameSearchRequest();
-        if (!string.IsNullOrEmpty(username))
+        [HttpGet]
+        public async Task<IActionResult> Search(
+            string? username = null,
+            string? opponent = null,
+            string? opening = null,
+            string? ecoCode = null,
+            string? result = null,
+            string? color = null,
+            List<string>? perfTypes = null,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            int? minRating = null,
+            int? maxRating = null,
+            bool? ratedOnly = null,
+            bool? analyzedOnly = null,
+            string? status = null,
+            int? minMoves = null,
+            int? maxMoves = null,
+            string? sortBy = null,
+            string? sortDirection = null,
+            int page = 1,
+            int pageSize = 50)
         {
-            model.Username = username;
+            if (string.IsNullOrEmpty(opponent) && string.IsNullOrEmpty(opening) &&
+                string.IsNullOrEmpty(ecoCode) && string.IsNullOrEmpty(result) &&
+                string.IsNullOrEmpty(color) && (perfTypes == null || !perfTypes.Any()) &&
+                fromDate == null && toDate == null && minRating == null && maxRating == null &&
+                ratedOnly == null && analyzedOnly == null && string.IsNullOrEmpty(status) &&
+                minMoves == null && maxMoves == null &&
+                string.IsNullOrEmpty(sortBy) && page == 1)
+            {
+                var model = new LichessGameSearchRequest();
+                if (!string.IsNullOrEmpty(username))
+                {
+                    model.Username = username;
+                }
+
+                ViewBag.PerfTypes = new List<string> { "bullet", "blitz", "rapid", "classical", "correspondence" };
+                ViewBag.Results = new List<string> { "win", "loss", "draw" };
+                ViewBag.Colors = new List<string> { "white", "black" };
+                ViewBag.SortOptions = new Dictionary<string, string>
+                {
+                    ["CreatedAt"] = "Date",
+                    ["Rating"] = "Rating",
+                    ["Opponent"] = "Opponent",
+                    ["Opening"] = "Opening",
+                    ["Moves"] = "Game Length"
+                };
+
+                return View(model);
+            }
+
+            // Otherwise, process as a search request
+            var request = new LichessGameSearchRequest
+            {
+                Username = username,
+                Opponent = opponent,
+                Opening = opening,
+                EcoCode = ecoCode,
+                Result = result,
+                Color = color,
+                PerfTypes = perfTypes,
+                FromDate = fromDate,
+                ToDate = toDate,
+                MinRating = minRating,
+                MaxRating = maxRating,
+                RatedOnly = ratedOnly,
+                AnalyzedOnly = analyzedOnly,
+                Status = status,
+                MinMoves = minMoves,
+                MaxMoves = maxMoves,
+                SortBy = sortBy ?? "CreatedAt",
+                SortDirection = sortDirection ?? "desc",
+                Page = page,
+                PageSize = pageSize
+            };
+
+            var (games, totalCount) = await _importService.SearchGamesAsync(request);
+
+            ViewBag.PerfTypes = new List<string> { "bullet", "blitz", "rapid", "classical", "correspondence" };
+            ViewBag.Results = new List<string> { "win", "loss", "draw" };
+            ViewBag.Colors = new List<string> { "white", "black" };
+            ViewBag.SortOptions = new Dictionary<string, string>
+            {
+                ["CreatedAt"] = "Date",
+                ["Rating"] = "Rating",
+                ["Opponent"] = "Opponent",
+                ["Opening"] = "Opening",
+                ["Moves"] = "Game Length"
+            };
+
+            ViewBag.TotalCount = totalCount;
+            ViewBag.TotalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
+            ViewBag.SearchRequest = request;
+
+            return View("SearchResults", games);
         }
-
-        ViewBag.PerfTypes = new List<string> { "bullet", "blitz", "rapid", "classical", "correspondence" };
-        ViewBag.Results = new List<string> { "win", "loss", "draw" };
-        ViewBag.Colors = new List<string> { "white", "black" };
-        ViewBag.SortOptions = new Dictionary<string, string>
-        {
-            ["CreatedAt"] = "Date",
-            ["Rating"] = "Rating",
-            ["Opponent"] = "Opponent",
-            ["Opening"] = "Opening",
-            ["Moves"] = "Game Length"
-        };
-
-        return View(model);
-    }
-
-    // Otherwise, process as a search request
-    var request = new LichessGameSearchRequest
-    {
-        Username = username,
-        Opponent = opponent,
-        Opening = opening,
-        EcoCode = ecoCode,
-        Result = result,
-        Color = color,
-        PerfTypes = perfTypes,
-        FromDate = fromDate,
-        ToDate = toDate,
-        MinRating = minRating,
-        MaxRating = maxRating,
-        RatedOnly = ratedOnly,
-        AnalyzedOnly = analyzedOnly,
-        Status = status,
-        MinMoves = minMoves,
-        MaxMoves = maxMoves,
-        SortBy = sortBy ?? "CreatedAt",
-        SortDirection = sortDirection ?? "desc",
-        Page = page,
-        PageSize = pageSize
-    };
-
-    var (games, totalCount) = await _importService.SearchGamesAsync(request);
-
-    ViewBag.PerfTypes = new List<string> { "bullet", "blitz", "rapid", "classical", "correspondence" };
-    ViewBag.Results = new List<string> { "win", "loss", "draw" };
-    ViewBag.Colors = new List<string> { "white", "black" };
-    ViewBag.SortOptions = new Dictionary<string, string>
-    {
-        ["CreatedAt"] = "Date",
-        ["Rating"] = "Rating", 
-        ["Opponent"] = "Opponent",
-        ["Opening"] = "Opening",
-        ["Moves"] = "Game Length"
-    };
-
-    ViewBag.TotalCount = totalCount;
-    ViewBag.TotalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
-    ViewBag.SearchRequest = request;
-
-    return View("SearchResults", games);
-}
 
         [HttpPost]
         public async Task<IActionResult> Search(LichessGameSearchRequest request)
@@ -262,7 +262,7 @@ public async Task<IActionResult> Search(
             ViewBag.SortOptions = new Dictionary<string, string>
             {
                 ["CreatedAt"] = "Date",
-                ["Rating"] = "Rating", 
+                ["Rating"] = "Rating",
                 ["Opponent"] = "Opponent",
                 ["Opening"] = "Opening",
                 ["Moves"] = "Game Length"
@@ -402,103 +402,103 @@ public async Task<IActionResult> Search(
 
         // Add this test method to your LichessController to debug the import process
 
-[HttpGet]
-public async Task<IActionResult> TestImport(string username = "Nredomrepyh")
-{
-    try
-    {
-        _logger.LogInformation($"Testing import for {username}");
-        
-        // Test API call directly
-        var httpClient = new HttpClient();
-        httpClient.DefaultRequestHeaders.Add("User-Agent", "ChessStudySystem/1.0");
-        
-        var url = $"https://lichess.org/api/games/user/{username}?max=5&opening=true&moves=true";
-        _logger.LogInformation($"Testing URL: {url}");
-        
-        var response = await httpClient.GetAsync(url);
-        _logger.LogInformation($"API Response: {response.StatusCode}");
-        
-        if (response.IsSuccessStatusCode)
+        [HttpGet]
+        public async Task<IActionResult> TestImport(string username = "Nredomrepyh")
         {
-            var content = await response.Content.ReadAsStringAsync();
-            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            
-            return Json(new
+            try
             {
-                success = true,
-                message = $"API working! Got {lines.Length} games",
-                statusCode = (int)response.StatusCode,
-                contentLength = content.Length,
-                firstGamePreview = lines.Length > 0 ? lines[0].Substring(0, Math.Min(200, lines[0].Length)) : "No games"
-            });
-        }
-        else
-        {
-            var errorContent = await response.Content.ReadAsStringAsync();
-            return Json(new
-            {
-                success = false,
-                message = $"API Error: {response.StatusCode}",
-                error = errorContent
-            });
-        }
-    }
-    catch (Exception ex)
-    {
-        _logger.LogError(ex, "Test import failed");
-        return Json(new
-        {
-            success = false,
-            message = $"Exception: {ex.Message}",
-            stackTrace = ex.StackTrace
-        });
-    }
-}
+                _logger.LogInformation($"Testing import for {username}");
 
-// Add this method to test the session creation and background task
-[HttpGet] 
-public async Task<IActionResult> TestSession()
-{
-    try
-    {
-        // Create a test session
-        var session = new ChessStudySystem.Web.Models.Lichess.ImportSession
-        {
-            Username = "test",
-            StartedAt = DateTime.UtcNow,
-            Status = "Running"
-        };
+                // Test API call directly
+                var httpClient = new HttpClient();
+                httpClient.DefaultRequestHeaders.Add("User-Agent", "ChessStudySystem/1.0");
 
-        // Simulate background progress updates
-        _ = Task.Run(async () =>
-        {
-            for (int i = 0; i <= 100; i += 10)
-            {
-                await Task.Delay(1000);
-                session.GamesProcessed = i;
-                session.GamesImported = i - 5;
-                _logger.LogInformation($"Test session progress: {i}%");
+                var url = $"https://lichess.org/api/games/user/{username}?max=5&opening=true&moves=true";
+                _logger.LogInformation($"Testing URL: {url}");
+
+                var response = await httpClient.GetAsync(url);
+                _logger.LogInformation($"API Response: {response.StatusCode}");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+                    return Json(new
+                    {
+                        success = true,
+                        message = $"API working! Got {lines.Length} games",
+                        statusCode = (int)response.StatusCode,
+                        contentLength = content.Length,
+                        firstGamePreview = lines.Length > 0 ? lines[0].Substring(0, Math.Min(200, lines[0].Length)) : "No games"
+                    });
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    return Json(new
+                    {
+                        success = false,
+                        message = $"API Error: {response.StatusCode}",
+                        error = errorContent
+                    });
+                }
             }
-            session.Status = "Completed";
-            session.CompletedAt = DateTime.UtcNow;
-        });
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Test import failed");
+                return Json(new
+                {
+                    success = false,
+                    message = $"Exception: {ex.Message}",
+                    stackTrace = ex.StackTrace
+                });
+            }
+        }
 
-        return Json(new
+        // Add this method to test the session creation and background task
+        [HttpGet]
+        public async Task<IActionResult> TestSession()
         {
-            success = true,
-            message = "Test session created",
-            sessionId = session.Id
-        });
-    }
-    catch (Exception ex)
-    {
-        return Json(new
-        {
-            success = false,
-            message = ex.Message
-        });
-    }
-}
+            try
+            {
+                // Create a test session
+                var session = new ChessStudySystem.Web.Models.Lichess.ImportSession
+                {
+                    Username = "test",
+                    StartedAt = DateTime.UtcNow,
+                    Status = "Running"
+                };
+
+                // Simulate background progress updates
+                _ = Task.Run(async () =>
+                {
+                    for (int i = 0; i <= 100; i += 10)
+                    {
+                        await Task.Delay(1000);
+                        session.GamesProcessed = i;
+                        session.GamesImported = i - 5;
+                        _logger.LogInformation($"Test session progress: {i}%");
+                    }
+                    session.Status = "Completed";
+                    session.CompletedAt = DateTime.UtcNow;
+                });
+
+                return Json(new
+                {
+                    success = true,
+                    message = "Test session created",
+                    sessionId = session.Id
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
     }
 }

@@ -126,110 +126,236 @@
                         <!-- Games Table -->
                         <div class="table-responsive">
                             <table class="table table-hover">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Opponent</th>
-                                        <th>Result</th>
-                                        <th>Color</th>
-                                        <th>Rating</th>
-                                        <th>Time Control</th>
-                                        <th>Opening</th>
-                                        <th>Moves</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
+<thead class="table-dark">
+    <tr>
+        <th scope="col">
+            <a href="@Url.Action("Search", GetSortedRouteValues("Date"))" 
+               class="text-decoration-none text-white d-flex align-items-center justify-content-between">
+                Date
+                @if (searchRequest?.SortBy?.ToLower() == "date" || searchRequest?.SortBy?.ToLower() == "createdat")
+                {
+                    <i class="fas fa-sort-@(searchRequest.SortDirection == "asc" ? "up" : "down") ms-2"></i>
+                }
+                else
+                {
+                    <i class="fas fa-sort ms-2 text-muted"></i>
+                }
+            </a>
+        </th>
+        <th scope="col">
+            <a href="@Url.Action("Search", GetSortedRouteValues("Opponent"))" 
+               class="text-decoration-none text-white d-flex align-items-center justify-content-between">
+                Opponent
+                @if (searchRequest?.SortBy?.ToLower() == "opponent")
+                {
+                    <i class="fas fa-sort-@(searchRequest.SortDirection == "asc" ? "up" : "down") ms-2"></i>
+                }
+                else
+                {
+                    <i class="fas fa-sort ms-2 text-muted"></i>
+                }
+            </a>
+        </th>
+        <th scope="col">
+            <a href="@Html.Raw(Url.Action("Search", GetSortedRouteValues("Result")))" 
+               class="text-decoration-none text-white d-flex align-items-center justify-content-between">
+                Result
+                @if (searchRequest?.SortBy?.ToLower() == "result")
+                {
+                    <i class="fas fa-sort-@(searchRequest.SortDirection == "asc" ? "up" : "down") ms-2"></i>
+                }
+                else
+                {
+                    <i class="fas fa-sort ms-2 text-muted"></i>
+                }
+            </a>
+        </th>
+        <th scope="col">
+            <a href="@Html.Raw(Url.Action("Search", GetSortedRouteValues("Color")))" 
+               class="text-decoration-none text-white d-flex align-items-center justify-content-between">
+                Color
+                @if (searchRequest?.SortBy?.ToLower() == "color")
+                {
+                    <i class="fas fa-sort-@(searchRequest.SortDirection == "asc" ? "up" : "down") ms-2"></i>
+                }
+                else
+                {
+                    <i class="fas fa-sort ms-2 text-muted"></i>
+                }
+            </a>
+        </th>
+        <th scope="col">
+            <a href="@Html.Raw(Url.Action("Search", GetSortedRouteValues("Rating")))" 
+               class="text-decoration-none text-white d-flex align-items-center justify-content-between">
+                Rating
+                @if (searchRequest?.SortBy?.ToLower() == "rating")
+                {
+                    <i class="fas fa-sort-@(searchRequest.SortDirection == "asc" ? "up" : "down") ms-2"></i>
+                }
+                else
+                {
+                    <i class="fas fa-sort ms-2 text-muted"></i>
+                }
+            </a>
+        </th>
+        <th scope="col">
+            <a href="@Html.Raw(Url.Action("Search", GetSortedRouteValues("TimeControl")))" 
+               class="text-decoration-none text-white d-flex align-items-center justify-content-between">
+                Time Control
+                @if (searchRequest?.SortBy?.ToLower() == "timecontrol" || searchRequest?.SortBy?.ToLower() == "time")
+                {
+                    <i class="fas fa-sort-@(searchRequest.SortDirection == "asc" ? "up" : "down") ms-2"></i>
+                }
+                else
+                {
+                    <i class="fas fa-sort ms-2 text-muted"></i>
+                }
+            </a>
+        </th>
+        <th scope="col">
+            <a href="@Html.Raw(Url.Action("Search", GetSortedRouteValues("Opening")))" 
+               class="text-decoration-none text-white d-flex align-items-center justify-content-between">
+                Opening
+                @if (searchRequest?.SortBy?.ToLower() == "opening")
+                {
+                    <i class="fas fa-sort-@(searchRequest.SortDirection == "asc" ? "up" : "down") ms-2"></i>
+                }
+                else
+                {
+                    <i class="fas fa-sort ms-2 text-muted"></i>
+                }
+            </a>
+        </th>
+        <th scope="col">
+            <a href="@Html.Raw(Url.Action("Search", GetSortedRouteValues("Moves")))" 
+               class="text-decoration-none text-white d-flex align-items-center justify-content-between">
+                Moves
+                @if (searchRequest?.SortBy?.ToLower() == "moves")
+                {
+                    <i class="fas fa-sort-@(searchRequest.SortDirection == "asc" ? "up" : "down") ms-2"></i>
+                }
+                else
+                {
+                    <i class="fas fa-sort ms-2 text-muted"></i>
+                }
+            </a>
+        </th>
+        <th scope="col">Actions</th>
+    </tr>
+</thead>
                                 <tbody>
-                                    @foreach (var game in Model)
-                                    {
-                                        <tr class="@GetRowClass(game.UserResult)">
-                                            <td>
-                                                <div class="d-flex flex-column">
-                                                    <span class="fw-bold">@game.CreatedAt.ToString("MMM dd")</span>
-                                                    <small class="text-muted">@game.CreatedAt.ToString("HH:mm")</small>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <div class="d-flex align-items-center">
-                                                    @if (!string.IsNullOrEmpty(game.OpponentTitle))
-                                                    {
-                                                        <span class="badge bg-warning text-dark me-2">@game.OpponentTitle</span>
-                                                    }
-                                                    <span class="fw-bold">@game.OpponentUsername</span>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <span class="badge @GetResultBadgeClass(game.UserResult)">
-                                                    @GetResultDisplay(game.UserResult)
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <span class="badge @(game.UserColor == "white" ? "bg-light text-dark" : "bg-dark text-white")">
-                                                    <i class="fas fa-chess-@(game.UserColor == "white" ? "king" : "king") me-1"></i>
-                                                    @game.UserColor?.Substring(0, 1).ToUpper()@game.UserColor?.Substring(1)
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <div class="d-flex flex-column">
-                                                    <span class="fw-bold">@game.UserRating</span>
-                                                    @if (game.UserRatingDiff.HasValue)
-                                                    {
-                                                        <small class="@(game.UserRatingDiff > 0 ? "text-success" : game.UserRatingDiff < 0 ? "text-danger" : "text-muted")">
-                                                            @(game.UserRatingDiff > 0 ? "+" : "")@game.UserRatingDiff
-                                                        </small>
-                                                    }
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <span class="badge bg-info">@game.PerfType</span>
-                                                @if (!string.IsNullOrEmpty(game.TimeControl))
-                                                {
-                                                    <br><small class="text-muted">@game.TimeControl</small>
-                                                }
-                                            </td>
-                                            <td>
-                                                @if (!string.IsNullOrEmpty(game.OpeningName))
-                                                {
-                                                    <div class="d-flex flex-column">
-                                                        @if (!string.IsNullOrEmpty(game.OpeningEco))
-                                                        {
-                                                            <span class="badge bg-secondary mb-1">@game.OpeningEco</span>
-                                                        }
-                                                        <small class="text-truncate" style="max-width: 200px;" title="@game.OpeningName">
-                                                            @game.OpeningName
-                                                        </small>
-                                                    </div>
-                                                }
-                                                else
-                                                {
-                                                    <span class="text-muted">Unknown</span>
-                                                }
-                                            </td>
-                                            <td>
-                                                <span class="fw-bold">@game.MovesCount</span>
-                                                <br><small class="text-muted">moves</small>
-                                            </td>
-                                            <td>
-                                                <div class="btn-group-vertical btn-group-sm">
-                                                    <a href="https://lichess.org/@game.LichessId" 
-                                                       target="_blank" 
-                                                       class="btn btn-outline-primary btn-sm"
-                                                       title="View on Lichess">
-                                                        <i class="fas fa-external-link-alt"></i>
-                                                    </a>
-                                                    @if (game.HasAnalysis)
-                                                    {
-                                                        <a href="https://lichess.org/@game.LichessId/analysis" 
-                                                           target="_blank" 
-                                                           class="btn btn-outline-info btn-sm"
-                                                           title="View Analysis">
-                                                            <i class="fas fa-microscope"></i>
-                                                        </a>
-                                                    }
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    }
+
+
+<!-- Replace your game table rows in SearchResults.cshtml -->
+@foreach (var game in Model)
+{
+    <tr class="@GetRowClass(game.UserResult) clickable-row" 
+        onclick="window.location.href='@Url.Action("Study", "Chess", new { gameId = game.LichessId })';"
+        style="cursor: pointer;"
+        title="Click to analyze this game">
+        <td>
+            <div class="d-flex flex-column">
+                <span class="fw-bold">@game.CreatedAt.ToString("MMM dd, yyyy")</span>
+                <small class="text-muted">@game.CreatedAt.ToString("HH:mm")</small>
+            </div>
+        </td>
+        <td>
+            <div class="d-flex align-items-center">
+                @if (!string.IsNullOrEmpty(game.OpponentTitle))
+                {
+                    <span class="badge bg-warning text-dark me-2">@game.OpponentTitle</span>
+                }
+                <div>
+                    <div class="fw-bold">@game.OpponentUsername</div>
+                    @if (game.OpponentRating.HasValue)
+                    {
+                        <small class="text-muted">(@game.OpponentRating)</small>
+                    }
+                </div>
+            </div>
+        </td>
+        <td>
+            <span class="badge @GetResultBadgeClass(game.UserResult)">
+                @GetResultDisplay(game.UserResult)
+            </span>
+        </td>
+        <td>
+            <span class="badge @(game.UserColor == "white" ? "bg-light text-dark" : "bg-dark text-white")">
+                @(game.UserColor?.ToUpper() ?? "?")
+            </span>
+        </td>
+        <td>
+            <div class="d-flex flex-column align-items-center">
+                <span class="fw-bold">@(game.UserRating?.ToString() ?? "?")</span>
+                @if (game.UserRatingDiff.HasValue)
+                {
+                    <small class="@(game.UserRatingDiff > 0 ? "text-success" : game.UserRatingDiff < 0 ? "text-danger" : "text-muted")">
+                        @(game.UserRatingDiff > 0 ? "+" : "")@game.UserRatingDiff
+                    </small>
+                }
+            </div>
+        </td>
+        <td>
+            <div class="d-flex flex-column">
+                <span class="fw-bold">@(game.Speed?.ToUpper() ?? "?")</span>
+                <small class="text-muted">@(game.TimeControl ?? "Unknown")</small>
+            </div>
+        </td>
+        <td>
+            @if (!string.IsNullOrEmpty(game.OpeningName))
+            {
+                <div>
+                    @if (!string.IsNullOrEmpty(game.OpeningEco))
+                    {
+                        <span class="badge bg-info text-dark me-1">@game.OpeningEco</span>
+                    }
+                    <small class="d-block text-truncate" style="max-width: 200px;" title="@game.OpeningName">
+                        @game.OpeningName
+                    </small>
+                </div>
+            }
+            else
+            {
+                <span class="text-muted">Unknown</span>
+            }
+        </td>
+        <td>
+            <span class="fw-bold">@game.MovesCount</span>
+            <br><small class="text-muted">moves</small>
+        </td>
+        <td>
+            <div class="btn-group-vertical btn-group-sm">
+                <a href="https://lichess.org/@game.LichessId" 
+                   target="_blank" 
+                   class="btn btn-outline-primary btn-sm"
+                   onclick="event.stopPropagation();"
+                   title="View on Lichess">
+                    <i class="fas fa-external-link-alt"></i>
+                </a>
+                @if (game.HasAnalysis)
+                {
+                    <a href="https://lichess.org/@game.LichessId/analysis" 
+                       target="_blank" 
+                       class="btn btn-outline-info btn-sm"
+                       onclick="event.stopPropagation();"
+                       title="View Analysis">
+                        <i class="fas fa-microscope"></i>
+                    </a>
+                }
+                <a href="@Url.Action("Study", "Chess", new { gameId = game.LichessId })"
+                   class="btn btn-outline-success btn-sm"
+                   onclick="event.stopPropagation();"
+                   title="Analyze in Study">
+                    <i class="fas fa-chess"></i>
+                </a>
+            </div>
+        </td>
+    </tr>
+}                     
+                                
+                                
+                                
+                                
                                 </tbody>
                             </table>
                         </div>
@@ -356,6 +482,41 @@
             _ => "Unknown"
         };
     }
+    // Add this function to your SearchResults.cshtml @functions section
+object GetSortedRouteValues(string sortBy)
+    {
+        var request = ViewBag.SearchRequest as ChessStudySystem.Web.Models.Lichess.LichessGameSearchRequest;
+        var currentSort = request?.SortBy?.ToLower();
+        var currentDirection = request?.SortDirection?.ToLower() ?? "desc";
+        
+        // Toggle direction if clicking on the same column, otherwise default to desc
+        var newDirection = (currentSort == sortBy.ToLower() && currentDirection == "desc") ? "asc" : "desc";
+        
+        return new {
+            username = request?.Username,
+            opponent = request?.Opponent,
+            opening = request?.Opening,
+            ecoCode = request?.EcoCode,
+            result = request?.Result,
+            color = request?.Color,
+            perfTypes = request?.PerfTypes,
+            fromDate = request?.FromDate?.ToString("yyyy-MM-dd"),
+            toDate = request?.ToDate?.ToString("yyyy-MM-dd"),
+            minRating = request?.MinRating,
+            maxRating = request?.MaxRating,
+            ratedOnly = request?.RatedOnly,
+            analyzedOnly = request?.AnalyzedOnly,
+            status = request?.Status,
+            minMoves = request?.MinMoves,
+            maxMoves = request?.MaxMoves,
+            sortBy = sortBy,
+            sortDirection = newDirection,
+            page = 1 // Reset to first page when sorting
+        };
+    }
+}
+
+
 }
 
 <style>
